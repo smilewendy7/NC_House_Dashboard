@@ -4,3 +4,23 @@
 {"ts": "2026-02-23 15:47:55", "report_month": "2024-01", "pdf": "data\\pdfs\\nc_housing_2024-01.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
 {"ts": "2026-02-23 15:48:34", "report_month": "2024-02", "pdf": "data\\pdfs\\nc_housing_2024-02.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
 {"ts": "2026-02-23 15:48:36", "report_month": "2024-03", "pdf": "data\\pdfs\\nc_housing_2024-03.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2024-04", "pdf": "data\\pdfs\\nc_housing_2024-04.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2024-05", "pdf": "data\\pdfs\\nc_housing_2024-05.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2024-06", "pdf": "data\\pdfs\\nc_housing_2024-06.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2024-07", "pdf": "data\\pdfs\\nc_housing_2024-07.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2024-08", "pdf": "data\\pdfs\\nc_housing_2024-08.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2024-09", "pdf": "data\\pdfs\\nc_housing_2024-09.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2024-10", "pdf": "data\\pdfs\\nc_housing_2024-10.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2024-11", "pdf": "data\\pdfs\\nc_housing_2024-11.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2024-12", "pdf": "data\\pdfs\\nc_housing_2024-12.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2025-01", "pdf": "data\\pdfs\\nc_housing_2025-01.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2025-02", "pdf": "data\\pdfs\\nc_housing_2025-02.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2025-03", "pdf": "data\\pdfs\\nc_housing_2025-03.pdf", "ok": true, "parse_status": "WARN", "price_ranges_rows": 10, "parse_notes": "missing listings history (y1..y3); missing sales history (y1..y3); missing price history (y1..y3)"}
+{"ts": "2026-03-04 11:14:37", "report_month": "2025-04", "pdf": "data\\pdfs\\nc_housing_2025-04.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2025-05", "pdf": "data\\pdfs\\nc_housing_2025-05.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2025-06", "pdf": "data\\pdfs\\nc_housing_2025-06.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2025-07", "pdf": "data\\pdfs\\nc_housing_2025-07.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2025-08", "pdf": "data\\pdfs\\nc_housing_2025-08.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2025-09", "pdf": "data\\pdfs\\nc_housing_2025-09.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 11:14:37", "report_month": "2025-10", "pdf": "data\\pdfs\\nc_housing_2025-10.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
+{"ts": "2026-03-04 13:55:59", "report_month": "2026-01", "pdf": "data\\pdfs\\nc_housing_2026-01.pdf", "ok": true, "parse_status": "WARN", "price_ranges_rows": 10, "parse_notes": "missing some YoY fields"}

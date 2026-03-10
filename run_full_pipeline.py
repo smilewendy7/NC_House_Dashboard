@@ -77,17 +77,25 @@ def preserve_csv_history(path: Path, key_fields: Sequence[str], log_file: Path) 
         f.write(msg + "\n")
 
 
-def build_steps(workers: int, force_extract: bool) -> List[List[str]]:
+def build_steps(workers: int, force_extract: bool, run_analytics: bool, strict_dq: bool) -> List[List[str]]:
     extract_cmd = [sys.executable, "extract_pdfs.py", "--workers", str(workers)]
     if force_extract:
         extract_cmd.append("--force")
 
-    return [
+    steps: List[List[str]] = [
         [sys.executable, "fetch_index.py"],
         [sys.executable, "fetch_manifest.py"],
         [sys.executable, "download_pdfs.py"],
         extract_cmd,
     ]
+
+    if run_analytics:
+        analytics_cmd = [sys.executable, "build_analytics.py"]
+        if strict_dq:
+            analytics_cmd.append("--strict-dq")
+        steps.append(analytics_cmd)
+
+    return steps
 
 
 def run_cmd(cmd: List[str], log_file: Path) -> int:
@@ -116,6 +124,10 @@ def is_extract_step(cmd: Sequence[str]) -> bool:
     return len(cmd) > 1 and Path(cmd[1]).name == "extract_pdfs.py"
 
 
+def is_analytics_step(cmd: Sequence[str]) -> bool:
+    return len(cmd) > 1 and Path(cmd[1]).name == "build_analytics.py"
+
+
 def failure_rows_count() -> int:
     failures_csv = Path("data") / "parsed" / "parse_failures.csv"
     _, rows = read_csv_rows(failures_csv)
@@ -125,12 +137,14 @@ def failure_rows_count() -> int:
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=(
-            "Run full NC housing ETL in one command: "
-            "index -> manifest -> download -> extract"
+            "Run full NC housing ETL+Analytics in one command: "
+            "index -> manifest -> download -> extract -> analytics"
         )
     )
     ap.add_argument("--workers", type=int, default=4, help="Workers for extract_pdfs.py (default: 4)")
     ap.add_argument("--force-extract", action="store_true", help="Pass --force to extract_pdfs.py")
+    ap.add_argument("--skip-analytics", action="store_true", help="Skip build_analytics.py (default: run analytics)")
+    ap.add_argument("--strict-dq", action="store_true", help="Pass --strict-dq to build_analytics.py")
     ap.add_argument("--dry-run", action="store_true", help="Print commands without executing")
     ap.add_argument(
         "--no-preserve-history",
@@ -148,7 +162,12 @@ def main() -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"pipeline_run_{now_ts()}.log"
 
-    steps = build_steps(workers=max(1, args.workers), force_extract=args.force_extract)
+    steps = build_steps(
+        workers=max(1, args.workers),
+        force_extract=args.force_extract,
+        run_analytics=not args.skip_analytics,
+        strict_dq=args.strict_dq,
+    )
 
     print(f"[INFO] Log file: {log_file}")
     print("[INFO] Steps:")
@@ -159,6 +178,12 @@ def main() -> None:
         print("[INFO] History preservation: OFF (snapshot-only mode)")
     else:
         print("[INFO] History preservation: ON (index/manifest/download outputs keep older rows)")
+
+    if args.skip_analytics:
+        print("[INFO] Analytics step: OFF (--skip-analytics)")
+    else:
+        mode = "strict" if args.strict_dq else "non-strict"
+        print(f"[INFO] Analytics step: ON ({mode})")
 
     if args.dry_run:
         print("[DRY RUN] No commands executed.")

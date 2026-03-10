@@ -66,6 +66,64 @@ def guess_report_month_from_filename(pdf_path: Path) -> Optional[str]:
     return m.group(1) if m else None
 
 
+
+_MONTH_NAME_TO_NUM = {
+    "jan": 1,
+    "january": 1,
+    "feb": 2,
+    "february": 2,
+    "mar": 3,
+    "march": 3,
+    "apr": 4,
+    "april": 4,
+    "may": 5,
+    "jun": 6,
+    "june": 6,
+    "jul": 7,
+    "july": 7,
+    "aug": 8,
+    "august": 8,
+    "sep": 9,
+    "sept": 9,
+    "september": 9,
+    "oct": 10,
+    "october": 10,
+    "nov": 11,
+    "november": 11,
+    "dec": 12,
+    "december": 12,
+}
+
+
+def infer_report_month_from_text(text: str) -> Optional[str]:
+    """
+    Try to infer report month from title text like:
+      - "North Carolina - Feb. 2025"
+      - "North Carolina - February 2025"
+    """
+    if not text:
+        return None
+
+    m = re.search(
+        r"(?:North\s+Carolina\s*[-:]\s*)?"
+        r"(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|"
+        r"Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|"
+        r"Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+(\d{4})",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if not m:
+        return None
+
+    month_token = m.group(1).rstrip('.').lower()
+    year = m.group(2)
+    month_num = _MONTH_NAME_TO_NUM.get(month_token)
+    if month_num is None:
+        return None
+    return f"{year}-{month_num:02d}"
+
+
+
 def parse_number(raw: str) -> Optional[float]:
     """
     Supports:
@@ -392,10 +450,12 @@ def dq_check_monthly(row: Dict[str, object]) -> Tuple[str, str]:
     if is_missing("median_price_y1", "median_price_y2", "median_price_y3"):
         problems_warn.append("missing price history (y1..y3)")
 
-    # YoY often present; if missing, it's not always fatal.
-    if is_missing("yoy_listings_pct", "yoy_sales_pct", "yoy_price_pct", "yoy_inventory_pct"):
-        problems_warn.append("missing some YoY fields")
-
+    # YoY block can be partially missing in some PDFs while core metrics are still valid.
+    # Only warn when 2+ YoY fields are missing to reduce noisy false positives.
+    yoy_keys = ["yoy_listings_pct", "yoy_sales_pct", "yoy_price_pct", "yoy_inventory_pct"]
+    yoy_missing = sum(1 for k in yoy_keys if f(k) is None)
+    if yoy_missing >= 2:
+        problems_warn.append(f"missing many YoY fields ({yoy_missing}/4)")
     # If headline missing, we can stop early (still continue to add more notes).
     ly0 = f("listings_y0")
     sy0 = f("sales_y0")
@@ -526,6 +586,16 @@ def build_monthly_summary_row(text: str, report_month: str, source_pdf: str) -> 
     }
 
     status, notes = dq_check_monthly(row)
+
+    inferred_report_month = infer_report_month_from_text(text)
+    if inferred_report_month and inferred_report_month != report_month:
+        mismatch_note = (
+            f"title month mismatch (expected {report_month}, found {inferred_report_month})"
+        )
+        notes = f"{notes}; {mismatch_note}" if notes else mismatch_note
+        if status == "OK":
+            status = "WARN"
+
     row["parse_status"] = status
     row["parse_notes"] = notes
     return row

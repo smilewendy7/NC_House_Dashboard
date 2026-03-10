@@ -24,3 +24,4 @@
 {"ts": "2026-03-04 11:14:37", "report_month": "2025-09", "pdf": "data\\pdfs\\nc_housing_2025-09.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
 {"ts": "2026-03-04 11:14:37", "report_month": "2025-10", "pdf": "data\\pdfs\\nc_housing_2025-10.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}
 {"ts": "2026-03-04 13:55:59", "report_month": "2026-01", "pdf": "data\\pdfs\\nc_housing_2026-01.pdf", "ok": true, "parse_status": "WARN", "price_ranges_rows": 10, "parse_notes": "missing some YoY fields"}
+{"ts": "2026-03-10 19:12:56", "report_month": "2026-02", "pdf": "data\\pdfs\\nc_housing_2026-02.pdf", "ok": true, "parse_status": "OK", "price_ranges_rows": 10}

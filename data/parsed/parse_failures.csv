@@ -1,2 +1,1 @@
 report_month,pdf,failure_type,error_type,error_msg,parse_status,parse_notes,logged_at
-2026-01,data\pdfs\nc_housing_2026-01.pdf,parse_status,,,WARN,missing some YoY fields,2026-03-04 13:55:59

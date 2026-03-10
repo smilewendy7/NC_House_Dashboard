@@ -1,3 +1,2 @@
 severity,table,key,field,issue,value,logged_at
-WARN,monthly_summary,2025-03,parse_status,upstream_parse_not_ok,WARN,2026-03-10 18:34:01
-WARN,monthly_summary,2026-01,parse_status,upstream_parse_not_ok,WARN,2026-03-10 18:34:01
+WARN,monthly_summary,2025-03,parse_status,upstream_parse_not_ok,WARN,2026-03-10 19:11:04

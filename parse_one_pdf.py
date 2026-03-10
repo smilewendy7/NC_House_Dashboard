@@ -67,6 +67,7 @@ def guess_report_month_from_filename(pdf_path: Path) -> Optional[str]:
 
 
 
+
 _MONTH_NAME_TO_NUM = {
     "jan": 1,
     "january": 1,
@@ -121,7 +122,6 @@ def infer_report_month_from_text(text: str) -> Optional[str]:
     if month_num is None:
         return None
     return f"{year}-{month_num:02d}"
-
 
 
 def parse_number(raw: str) -> Optional[float]:
@@ -442,20 +442,32 @@ def dq_check_monthly(row: Dict[str, object]) -> Tuple[str, str]:
     if is_missing("listings_y0", "sales_y0", "median_price_y0", "months_inventory_current"):
         problems_fail.append("missing y0 headline fields")
 
-    # history fields are expected in this report type
-    if is_missing("listings_y1", "listings_y2", "listings_y3"):
-        problems_warn.append("missing listings history (y1..y3)")
-    if is_missing("sales_y1", "sales_y2", "sales_y3"):
-        problems_warn.append("missing sales history (y1..y3)")
-    if is_missing("median_price_y1", "median_price_y2", "median_price_y3"):
-        problems_warn.append("missing price history (y1..y3)")
+    # History warnings: only alert when y1 is missing (required for direct YoY checks).
+    # Missing y2/y3 alone is tolerated to reduce noisy WARNs.
+    if f("listings_y1") is None:
+        problems_warn.append("missing listings_y1")
+    if f("sales_y1") is None:
+        problems_warn.append("missing sales_y1")
+    if f("median_price_y1") is None:
+        problems_warn.append("missing median_price_y1")
 
     # YoY block can be partially missing in some PDFs while core metrics are still valid.
-    # Only warn when 2+ YoY fields are missing to reduce noisy false positives.
-    yoy_keys = ["yoy_listings_pct", "yoy_sales_pct", "yoy_price_pct", "yoy_inventory_pct"]
-    yoy_missing = sum(1 for k in yoy_keys if f(k) is None)
-    if yoy_missing >= 2:
-        problems_warn.append(f"missing many YoY fields ({yoy_missing}/4)")
+    # Count only *effective* YoY missing fields:
+    # - listings/sales/price YoY can be derived from y0 vs y1 if raw YoY is absent
+    # - inventory YoY cannot be derived here (no inventory_y1 field), so missing remains missing
+    effective_missing = 0
+    if f("yoy_listings_pct") is None and (f("listings_y0") is None or f("listings_y1") is None):
+        effective_missing += 1
+    if f("yoy_sales_pct") is None and (f("sales_y0") is None or f("sales_y1") is None):
+        effective_missing += 1
+    if f("yoy_price_pct") is None and (f("median_price_y0") is None or f("median_price_y1") is None):
+        effective_missing += 1
+    if f("yoy_inventory_pct") is None:
+        effective_missing += 1
+
+    if effective_missing >= 2:
+        problems_warn.append(f"missing many YoY fields ({effective_missing}/4)")
+
     # If headline missing, we can stop early (still continue to add more notes).
     ly0 = f("listings_y0")
     sy0 = f("sales_y0")

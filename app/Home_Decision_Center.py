@@ -1,199 +1,317 @@
-# Home_Decision_Center.py
-# Streamlit Page 1: Home / Decision Center
-# Bilingual: English / 中文
-# Styled version with cleaner layout + CSS polish
-
 from __future__ import annotations
 
 import math
 from pathlib import Path
 from typing import Optional, Tuple
+from textwrap import dedent
 
 import pandas as pd
 import streamlit as st
 
 
-# -----------------------------
-# Page config
-# -----------------------------
 st.set_page_config(
     page_title="NC Housing Decision Center",
     page_icon="🏠",
     layout="wide",
 )
 
-
-# -----------------------------
-# Config
-# -----------------------------
 MONTHLY_PATH = Path("data/analytics/monthly_metrics.csv")
 PRICE_BAND_PATH = Path("data/analytics/price_ranges_enriched.csv")
 
 
-# -----------------------------
-# CSS Styling
-# -----------------------------
 def inject_css() -> None:
     st.markdown(
-        """
-        <style>
-        /* ===== Global ===== */
-        .main {
-            background-color: #f7f8fa;
-        }
+        dedent(
+            """
+            <style>
+            .main {
+                background: #f7f8fa;
+            }
 
-        .block-container {
-            padding-top: 2rem;
-            padding-bottom: 2rem;
-            padding-left: 2rem;
-            padding-right: 2rem;
-            max-width: 1200px;
-        }
+            .block-container {
+                padding-top: 4.2rem;
+                padding-bottom: 2rem;
+                padding-left: 2rem;
+                padding-right: 2rem;
+                max-width: 1240px;
+            }
 
-        /* ===== Typography ===== */
-        .page-title {
-            font-size: 2.2rem;
-            font-weight: 800;
-            line-height: 1.2;
-            margin-bottom: 0.3rem;
-            color: #111827;
-        }
+            section[data-testid="stSidebar"] {
+                background-color: #fcfcfd;
+                border-right: 1px solid #eceef2;
+            }
 
-        .page-subtitle {
-            font-size: 1rem;
-            color: #6b7280;
-            margin-bottom: 1.2rem;
-        }
+            .page-title {
+                font-size: 2.25rem;
+                font-weight: 800;
+                line-height: 1.2;
+                margin-bottom: 0.25rem;
+                color: #0f172a;
+                letter-spacing: -0.02em;
+            }
 
-        .section-title {
-            font-size: 1.18rem;
-            font-weight: 700;
-            color: #111827;
-            margin-bottom: 0.8rem;
-        }
+            .page-subtitle {
+                font-size: 1rem;
+                color: #64748b;
+                margin-bottom: 1.4rem;
+            }
 
-        .small-muted {
-            color: #6b7280;
-            font-size: 0.92rem;
-        }
+            .section-title {
+                font-size: 1.12rem;
+                font-weight: 800;
+                color: #0f172a;
+                margin-bottom: 0.85rem;
+            }
 
-        /* ===== Cards ===== */
-        .app-card {
-            background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 18px;
-            padding: 1.2rem 1.2rem;
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
-            margin-bottom: 1rem;
-        }
+            .small-muted {
+                color: #64748b;
+                font-size: 0.92rem;
+                line-height: 1.55;
+            }
 
-        .result-card {
-            background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 20px;
-            padding: 1.35rem 1.35rem;
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
-            margin-bottom: 1rem;
-        }
+            .footer-line {
+                color: #94a3b8;
+                font-size: 0.84rem;
+                margin-top: 0.3rem;
+            }
 
-        /* ===== KPI / badges ===== */
-        .signal-badge {
-            display: inline-block;
-            padding: 0.35rem 0.75rem;
-            border-radius: 999px;
-            font-size: 0.84rem;
-            font-weight: 700;
-            margin-right: 0.4rem;
-            margin-bottom: 0.35rem;
-        }
+            .control-panel {
+                background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+                border: 1px solid #e5e7eb;
+                border-radius: 22px;
+                padding: 1.15rem 1.1rem 0.8rem 1.1rem;
+                box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+                margin-bottom: 1rem;
+            }
 
-        .badge-green {
-            background-color: #dcfce7;
-            color: #166534;
-        }
+            .control-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 0.9rem;
+            }
 
-        .badge-red {
-            background-color: #fee2e2;
-            color: #991b1b;
-        }
+            .control-title {
+                font-size: 1.05rem;
+                font-weight: 800;
+                color: #0f172a;
+            }
 
-        .badge-yellow {
-            background-color: #fef3c7;
-            color: #92400e;
-        }
+            .control-chip {
+                display: inline-block;
+                padding: 0.28rem 0.6rem;
+                border-radius: 999px;
+                font-size: 0.78rem;
+                font-weight: 700;
+                background: #eff6ff;
+                color: #1d4ed8;
+                border: 1px solid #dbeafe;
+            }
 
-        .badge-blue {
-            background-color: #dbeafe;
-            color: #1d4ed8;
-        }
+            .control-note {
+                font-size: 0.88rem;
+                color: #64748b;
+                margin-bottom: 0.75rem;
+            }
 
-        /* ===== Metric rows ===== */
-        .metric-label {
-            color: #6b7280;
-            font-size: 0.92rem;
-            margin-bottom: 0.12rem;
-        }
+            .mini-tip {
+                background: #f8fafc;
+                border: 1px dashed #dbeafe;
+                color: #475569;
+                border-radius: 14px;
+                padding: 0.8rem 0.85rem;
+                font-size: 0.88rem;
+                line-height: 1.5;
+                margin-top: 0.8rem;
+            }
 
-        .metric-value {
-            font-size: 1.45rem;
-            font-weight: 800;
-            color: #111827;
-            margin-bottom: 0.7rem;
-        }
+            .result-card {
+                background: #ffffff;
+                border: 1px solid #e5e7eb;
+                border-radius: 20px;
+                padding: 1.25rem 1.25rem;
+                box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+                margin-bottom: 1rem;
+            }
 
-        /* ===== Strategy box ===== */
-        .strategy-box {
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
-            border-radius: 14px;
-            padding: 0.9rem 1rem;
-            margin-top: 0.8rem;
-        }
+            .hero-card {
+                background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+                border: 1px solid #dbeafe;
+                border-radius: 20px;
+                padding: 1.25rem 1.25rem;
+                box-shadow: 0 8px 24px rgba(29, 78, 216, 0.06);
+                margin-bottom: 1rem;
+            }
 
-        /* ===== Form area ===== */
-        div[data-testid="stForm"] {
-            background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 20px;
-            padding: 1rem 1rem 0.65rem 1rem;
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
-        }
+            .signal-badge {
+                display: inline-block;
+                padding: 0.38rem 0.78rem;
+                border-radius: 999px;
+                font-size: 0.84rem;
+                font-weight: 800;
+                margin-right: 0.45rem;
+                margin-bottom: 0.4rem;
+            }
 
-        /* ===== Buttons ===== */
-        div.stButton > button,
-        div[data-testid="stFormSubmitButton"] > button {
-            border-radius: 12px;
-            font-weight: 700;
-            padding: 0.6rem 1rem;
-            border: 1px solid #111827;
-        }
+            .badge-green {
+                background-color: #dcfce7;
+                color: #166534;
+            }
 
-        /* ===== Sidebar ===== */
-        section[data-testid="stSidebar"] {
-            background-color: #fcfcfd;
-            border-right: 1px solid #eceef2;
-        }
+            .badge-red {
+                background-color: #fee2e2;
+                color: #991b1b;
+            }
 
-        /* ===== Divider tweaks ===== */
-        hr {
-            margin-top: 0.8rem;
-            margin-bottom: 0.8rem;
-        }
-        </style>
-        """,
+            .badge-yellow {
+                background-color: #fef3c7;
+                color: #92400e;
+            }
+
+            .badge-blue {
+                background-color: #dbeafe;
+                color: #1d4ed8;
+            }
+
+            .metric-grid {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 0.85rem;
+                margin-top: 0.95rem;
+                margin-bottom: 0.95rem;
+            }
+
+            .metric-box {
+                background: #f8fafc;
+                border: 1px solid #e5e7eb;
+                border-radius: 16px;
+                padding: 0.9rem 0.95rem;
+            }
+
+            .metric-label {
+                color: #64748b;
+                font-size: 0.86rem;
+                margin-bottom: 0.22rem;
+            }
+
+            .metric-value {
+                font-size: 1.32rem;
+                font-weight: 800;
+                color: #0f172a;
+                line-height: 1.2;
+            }
+
+            .strategy-box {
+                background: #f8fafc;
+                border: 1px solid #e5e7eb;
+                border-radius: 16px;
+                padding: 0.95rem 1rem;
+                margin-top: 0.7rem;
+            }
+
+            .strategy-title {
+                font-size: 0.98rem;
+                font-weight: 800;
+                color: #0f172a;
+                margin-bottom: 0.7rem;
+            }
+
+            .strategy-item {
+                display: flex;
+                align-items: flex-start;
+                gap: 0.65rem;
+                margin-bottom: 0.65rem;
+                font-size: 0.96rem;
+                color: #0f172a;
+                line-height: 1.55;
+            }
+
+            .strategy-check {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 1.3rem;
+                height: 1.3rem;
+                border-radius: 999px;
+                background: #dcfce7;
+                color: #15803d;
+                font-size: 0.84rem;
+                font-weight: 900;
+                flex-shrink: 0;
+                margin-top: 0.08rem;
+                border: 1px solid #86efac;
+            }
+
+            .highlight-line {
+                font-size: 1.04rem;
+                font-weight: 800;
+                color: #0f172a;
+                margin-top: 0.35rem;
+                margin-bottom: 0.35rem;
+            }
+
+            .temp-line {
+                font-size: 1.5rem;
+                font-weight: 800;
+                color: #0f172a;
+                margin-top: 0.4rem;
+                margin-bottom: 0.35rem;
+            }
+
+            div[data-testid="stForm"] {
+                background: transparent;
+                border: none;
+                padding: 0;
+                box-shadow: none;
+            }
+
+            div[data-baseweb="select"] > div {
+                border-radius: 12px !important;
+                border: 1px solid #e5e7eb !important;
+                background-color: #f8fafc !important;
+            }
+
+            div[data-testid="stSlider"] {
+                padding-top: 0.25rem;
+                padding-bottom: 0.45rem;
+            }
+
+            div.stButton > button,
+            div[data-testid="stFormSubmitButton"] > button {
+                border-radius: 12px;
+                font-weight: 700;
+                padding: 0.68rem 1rem;
+                border: 1px solid #0f172a;
+                background: white;
+                transition: all 0.18s ease;
+            }
+
+            div.stButton > button:hover,
+            div[data-testid="stFormSubmitButton"] > button:hover {
+                background: #0f172a;
+                color: white;
+                border-color: #0f172a;
+            }
+
+            label, .stSelectbox label, .stSlider label {
+                font-weight: 600 !important;
+                color: #334155 !important;
+            }
+            </style>
+            """
+        ),
         unsafe_allow_html=True,
     )
 
 
-# -----------------------------
-# Language packs
-# -----------------------------
 TEXT = {
     "English": {
-        "lang_label": "Language / 语言",
         "title": "Home / Decision Center",
         "caption": "Input your profile and get a practical buyer/seller strategy from the latest NC market data.",
         "profile": "Your Profile",
+        "profile_chip": "Interactive Input",
+        "profile_note": "Adjust your budget, timeline, and goal to generate a personalized market recommendation.",
+        "mini_tip": "Tip: this page helps buyers, sellers, and agents quickly understand whether the current market environment is favorable and what action to take next.",
         "identity": "Identity",
         "budget": "Budget (USD, in $1,000s)",
         "timeline": "Timeline",
@@ -209,17 +327,15 @@ TEXT = {
         ),
         "decision_card": "Decision Card",
         "market_signal": "Buyer Market Signal",
-        "market_condition": "Market Condition",
         "inventory_trend": "Inventory Trend",
         "competition": "Competition",
         "action_suggestion": "Action Suggestion",
         "suggested_strategy": "Suggested Strategy",
         "budget_temp": "Your Budget Market Temperature",
         "timing_suggestion": "Timing Suggestion",
-        "latest_data": "Latest data month",
         "profile_summary": "Profile",
         "reason": "Reason",
-        "state_median_inventory": "State latest inventory",
+        "state_inventory": "State latest inventory",
         "band_inventory": "Inventory in band",
         "opportunity_score": "Opportunity score (quick)",
         "target_budget": "Target budget",
@@ -231,19 +347,22 @@ TEXT = {
         "reason_watch": "Inventory rising + sales slowing. Buyer leverage likely improving.",
         "reason_fast": "Inventory tightening + sales strengthening. Competition may increase.",
         "reason_selective": "Signals are mixed. Keep pre-approval ready and negotiate case-by-case.",
-        "strategy_credit": "✓ Request seller credit",
-        "strategy_repair": "✓ Negotiate inspection repair",
-        "strategy_below_list": "✓ Consider offers below list if DOM > 20",
-        "strategy_clean": "✓ Use a clean offer structure",
-        "strategy_financing": "✓ Keep financing contingency strong",
+        "strategy_credit": "Request seller credit",
+        "strategy_repair": "Negotiate inspection repair",
+        "strategy_below_list": "Consider offers below list if DOM > 20",
+        "strategy_clean": "Use a clean offer structure",
+        "strategy_financing": "Keep financing contingency strong",
         "band_label": "Band",
         "months_inventory_label": "Months Inventory",
+        "months_unit": "months",
     },
     "中文": {
-        "lang_label": "Language / 语言",
         "title": "首页 / 决策中心",
         "caption": "输入你的条件，获得基于最新北卡房地产市场数据的买家/卖家实用策略建议。",
         "profile": "你的资料",
+        "profile_chip": "互动输入",
+        "profile_note": "调整你的预算、时间窗口和目标，生成更个性化的市场建议。",
+        "mini_tip": "提示：这个页面用于帮助买家、卖家和经纪人快速判断当前市场环境是否更有利，以及下一步如何行动。",
         "identity": "身份",
         "budget": "预算（美元，单位：千）",
         "timeline": "时间窗口",
@@ -259,17 +378,15 @@ TEXT = {
         ),
         "decision_card": "决策卡片",
         "market_signal": "买家市场信号",
-        "market_condition": "市场状态",
         "inventory_trend": "库存趋势",
         "competition": "竞争强度",
         "action_suggestion": "行动建议",
         "suggested_strategy": "建议策略",
         "budget_temp": "你的预算段市场温度",
         "timing_suggestion": "时机建议",
-        "latest_data": "最新数据月份",
         "profile_summary": "用户条件",
         "reason": "原因",
-        "state_median_inventory": "全州最新库存值",
+        "state_inventory": "全州最新库存值",
         "band_inventory": "该预算段库存",
         "opportunity_score": "机会分数（快速）",
         "target_budget": "目标预算",
@@ -281,13 +398,14 @@ TEXT = {
         "reason_watch": "库存上升 + 成交放缓，买方议价能力可能继续改善。",
         "reason_fast": "库存收紧 + 成交增强，竞争可能上升。",
         "reason_selective": "信号较混合。保持贷款预批，具体房源具体谈判。",
-        "strategy_credit": "✓ 争取 seller credit（卖家补贴）",
-        "strategy_repair": "✓ 谈 inspection repair（验房维修）",
-        "strategy_below_list": "✓ 如果 DOM > 20，可考虑低于挂牌价出价",
-        "strategy_clean": "✓ 保持报价结构清晰干净",
-        "strategy_financing": "✓ 保持融资条款稳健",
+        "strategy_credit": "争取 seller credit（卖家补贴）",
+        "strategy_repair": "谈 inspection repair（验房维修）",
+        "strategy_below_list": "如果 DOM > 20，可考虑低于挂牌价出价",
+        "strategy_clean": "保持报价结构清晰干净",
+        "strategy_financing": "保持融资条款稳健",
         "band_label": "价格区间",
         "months_inventory_label": "库存月数",
+        "months_unit": "个月",
     },
 }
 
@@ -338,13 +456,6 @@ LABELS = {
 }
 
 
-# -----------------------------
-# Helpers
-# -----------------------------
-def tr(label_key: str, t: dict) -> str:
-    return t.get(label_key, label_key)
-
-
 def show_label(value: str, labels: dict) -> str:
     return labels.get(value, value)
 
@@ -361,9 +472,22 @@ def fmt_num(x: float, digits: int = 2) -> str:
     return f"{x:.{digits}f}"
 
 
-# -----------------------------
-# Data loaders
-# -----------------------------
+def build_strategy_html(strategy_items: list[str]) -> str:
+    blocks = []
+    for item in strategy_items:
+        blocks.append(
+            dedent(
+                f"""
+                <div class="strategy-item">
+                    <span class="strategy-check">✓</span>
+                    <span>{item}</span>
+                </div>
+                """
+            )
+        )
+    return "".join(blocks)
+
+
 @st.cache_data(ttl=60)
 def load_monthly_metrics(path: Path) -> pd.DataFrame:
     if not path.exists():
@@ -423,9 +547,6 @@ def load_price_bands(path: Path) -> pd.DataFrame:
     return df
 
 
-# -----------------------------
-# Signals / scoring
-# -----------------------------
 def trend_label(series: pd.Series) -> str:
     s = series.dropna()
     if len(s) < 2:
@@ -471,11 +592,7 @@ def budget_temp(inv: float) -> Tuple[str, str]:
     return "🟢", "Buyer Friendly"
 
 
-def buyer_opportunity_score(
-    inv_growth: float,
-    sales_decline: float,
-    price_growth_slowdown: float,
-) -> float:
+def buyer_opportunity_score(inv_growth: float, sales_decline: float, price_growth_slowdown: float) -> float:
     vals = [inv_growth, sales_decline, price_growth_slowdown]
     vals = [v for v in vals if pd.notna(v)]
     return float(sum(vals)) if vals else 0.0
@@ -508,9 +625,6 @@ def pick_budget_band(latest_band_df: pd.DataFrame, budget_usd: float) -> Optiona
     return latest_band_df.iloc[0]
 
 
-# -----------------------------
-# Language selector
-# -----------------------------
 if "lang" not in st.session_state:
     st.session_state.lang = "English"
 
@@ -526,22 +640,16 @@ labels = LABELS[lang]
 
 inject_css()
 
-
-# -----------------------------
-# Page header
-# -----------------------------
 st.markdown(
-    f"""
-    <div class="page-title">🏠 {t['title']}</div>
-    <div class="page-subtitle">{t['caption']}</div>
-    """,
+    dedent(
+        f"""
+        <div class="page-title">🏠 {t['title']}</div>
+        <div class="page-subtitle">{t['caption']}</div>
+        """
+    ),
     unsafe_allow_html=True,
 )
 
-
-# -----------------------------
-# Load data
-# -----------------------------
 monthly_df = load_monthly_metrics(MONTHLY_PATH)
 band_df = load_price_bands(PRICE_BAND_PATH)
 
@@ -553,60 +661,52 @@ latest_month = monthly_df["report_month"].dropna().astype(str).max()
 m_latest = monthly_df[monthly_df["report_month"] == latest_month]
 b_latest = band_df[band_df["report_month"] == latest_month]
 
-
-# -----------------------------
-# Layout
-# -----------------------------
 left, right = st.columns([1, 2])
 
-
-# -----------------------------
-# Left panel: Form
-# -----------------------------
 with left:
     st.markdown(
-        f'<div class="section-title">{t["profile"]}</div>',
+        dedent(
+            f"""
+            <div class="control-panel">
+                <div class="control-header">
+                    <div class="control-title">{t["profile"]}</div>
+                    <div class="control-chip">{t["profile_chip"]}</div>
+                </div>
+                <div class="control-note">{t["profile_note"]}</div>
+            </div>
+            """
+        ),
         unsafe_allow_html=True,
     )
 
     with st.form("decision_form", clear_on_submit=False):
         identity = st.selectbox(t["identity"], opt["identity"])
-
-        budget_k = st.slider(
-            t["budget"],
-            min_value=200,
-            max_value=1500,
-            value=550,
-            step=10,
-        )
-
+        budget_k = st.slider(t["budget"], min_value=200, max_value=1500, value=550, step=10)
         timeline = st.selectbox(t["timeline"], opt["timeline"])
         goal = st.selectbox(t["goal"], opt["goal"])
         down_payment = st.selectbox(t["down_payment"], opt["down_payment"])
-
-        rate_assumption = st.slider(
-            t["rate"],
-            min_value=5.0,
-            max_value=7.5,
-            value=6.25,
-            step=0.05,
-        )
-
+        rate_assumption = st.slider(t["rate"], min_value=5.0, max_value=7.5, value=6.25, step=0.05)
         submitted = st.form_submit_button(t["submit"])
+
+    st.markdown(
+        dedent(
+            f"""
+            <div class="mini-tip">
+                {t["mini_tip"]}
+            </div>
+            """
+        ),
+        unsafe_allow_html=True,
+    )
 
 if not submitted:
     st.info(t["fill_form"])
     st.stop()
 
-
-# -----------------------------
-# Core calculations
-# -----------------------------
 budget_usd = float(budget_k) * 1000.0
 
 inv_trend = trend_label(monthly_df["months_inventory"])
 sales_tr = trend_label(monthly_df["sales"])
-price_tr = trend_label(monthly_df["median_price"])
 overall = market_condition(inv_trend, sales_tr)
 
 band_row = pick_budget_band(b_latest, budget_usd)
@@ -628,21 +728,9 @@ state_inv_latest = (
     else float("nan")
 )
 
-inv_growth = (
-    float(monthly_df["mom_inventory_pct"].dropna().tail(1).mean())
-    if "mom_inventory_pct" in monthly_df.columns
-    else 0.0
-)
-sales_decline = (
-    -float(monthly_df["mom_sales_pct"].dropna().tail(1).mean())
-    if "mom_sales_pct" in monthly_df.columns
-    else 0.0
-)
-price_slowdown = (
-    -float(monthly_df["mom_price_pct"].dropna().tail(1).mean())
-    if "mom_price_pct" in monthly_df.columns
-    else 0.0
-)
+inv_growth = float(monthly_df["mom_inventory_pct"].dropna().tail(1).mean()) if "mom_inventory_pct" in monthly_df.columns else 0.0
+sales_decline = -float(monthly_df["mom_sales_pct"].dropna().tail(1).mean()) if "mom_sales_pct" in monthly_df.columns else 0.0
+price_slowdown = -float(monthly_df["mom_price_pct"].dropna().tail(1).mean()) if "mom_price_pct" in monthly_df.columns else 0.0
 opp_score = buyer_opportunity_score(inv_growth, sales_decline, price_slowdown)
 
 if inv_trend == "Rising" and sales_tr == "Falling":
@@ -655,7 +743,7 @@ else:
     timing_title = t["recommend_selective"]
     timing_reason = t["reason_selective"]
 
-strategy = []
+strategy: list[str] = []
 
 if pd.notna(band_inv) and pd.notna(state_inv_latest) and band_inv > state_inv_latest:
     strategy.append(t["strategy_credit"])
@@ -681,12 +769,7 @@ display_overall = show_label(overall, labels)
 display_inv_trend = show_label(inv_trend, labels)
 display_comp = show_label(comp, labels)
 display_temp_label = show_label(temp_label, labels)
-display_price_tr = show_label(price_tr, labels)
 
-
-# -----------------------------
-# Right panel: Styled results
-# -----------------------------
 with right:
     st.markdown(
         f'<div class="section-title">{t["decision_card"]}</div>',
@@ -700,85 +783,119 @@ with right:
         badge_class = "badge-red"
 
     st.markdown(
-        f"""
-        <div class="result-card">
-            <div class="small-muted">{t['market_signal']}</div>
-            <div style="margin-top: 0.5rem;">
-                <span class="signal-badge {badge_class}">{display_overall}</span>
-                <span class="signal-badge badge-blue">{t['inventory_trend']}: {display_inv_trend}</span>
-                <span class="signal-badge badge-yellow">{t['competition']}: {display_comp}</span>
+        dedent(
+            f"""
+            <div class="hero-card">
+                <div class="small-muted">{t['market_signal']}</div>
+                <div style="margin-top: 0.55rem;">
+                    <span class="signal-badge {badge_class}">{display_overall}</span>
+                    <span class="signal-badge badge-blue">{t['inventory_trend']}: {display_inv_trend}</span>
+                    <span class="signal-badge badge-yellow">{t['competition']}: {display_comp}</span>
+                </div>
             </div>
-        </div>
-        """,
+            """
+        ),
+        unsafe_allow_html=True,
+    )
+
+    strategy_html = build_strategy_html(strategy)
+
+    # 行动建议卡（不用 HTML，直接用 Streamlit 原生组件）
+    with st.container(border=True):
+        st.markdown(f"### {t['action_suggestion']}")
+        st.caption(f"{t['target_budget']}: {band_name}, {fmt_money(budget_usd)}")
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric(
+                label=t["band_inventory"],
+                value=f"{fmt_num(band_inv)} {t['months_unit']}",
+            )
+        with c2:
+            st.metric(
+                label=t["state_inventory"],
+                value=f"{fmt_num(state_inv_latest)} {t['months_unit']}",
+            )
+        with c3:
+            st.metric(
+                label=t["opportunity_score"],
+                value=fmt_num(opp_score),
+            )
+
+        st.markdown(f"**{t['suggested_strategy']}**")
+
+        for item in strategy:
+            st.markdown(
+                f"""
+                <div style="
+                    display:flex;
+                    align-items:flex-start;
+                    gap:10px;
+                    margin:10px 0;
+                    font-size:16px;
+                    line-height:1.5;
+                ">
+                    <div style="
+                        width:22px;
+                        height:22px;
+                        min-width:22px;
+                        border-radius:999px;
+                        background:#dcfce7;
+                        color:#15803d;
+                        display:flex;
+                        align-items:center;
+                        justify-content:center;
+                        font-weight:800;
+                        border:1px solid #86efac;
+                        margin-top:2px;
+                    ">✓</div>
+                    <div>{item}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    st.markdown(
+        dedent(
+            f"""
+            <div class="result-card">
+                <div class="section-title">{t['budget_temp']}</div>
+                <div class="temp-line">{temp_icon} {display_temp_label}</div>
+                <div class="small-muted">
+                    {t['band_label']}: {band_name} | {t['months_inventory_label']}: {fmt_num(band_inv)}
+                </div>
+            </div>
+            """
+        ),
         unsafe_allow_html=True,
     )
 
     st.markdown(
-        f"""
-        <div class="result-card">
-            <div class="section-title" style="margin-bottom: 0.45rem;">{t['action_suggestion']}</div>
-            <div class="small-muted" style="margin-bottom: 0.9rem;">
-                {t['target_budget']}: <strong>{band_name}</strong>, {fmt_money(budget_usd)}
+        dedent(
+            f"""
+            <div class="result-card">
+                <div class="section-title">{t['timing_suggestion']}</div>
+                <div class="highlight-line">{timing_title}</div>
+                <div class="small-muted">{t['reason']}: {timing_reason}</div>
             </div>
-
-            <div class="metric-label">{t['band_inventory']}</div>
-            <div class="metric-value">{fmt_num(band_inv)} months</div>
-
-            <div class="metric-label">{t['state_median_inventory']}</div>
-            <div class="metric-value">{fmt_num(state_inv_latest)} months</div>
-
-            <div class="metric-label">{t['opportunity_score']}</div>
-            <div class="metric-value">{fmt_num(opp_score)}</div>
-
-            <div class="strategy-box">
-                <div style="font-weight: 700; margin-bottom: 0.45rem;">{t['suggested_strategy']}</div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    for item in strategy:
-        st.write(item)
-
-    st.markdown(
-        """
-            </div>
-        </div>
-        """,
+            """
+        ),
         unsafe_allow_html=True,
     )
 
     st.markdown(
-        f"""
-        <div class="result-card">
-            <div class="section-title">{t['budget_temp']}</div>
-            <div style="font-size: 1.5rem; font-weight: 800; margin-top: 0.45rem;">
-                {temp_icon} {display_temp_label}
+        dedent(
+            f"""
+            <div class="footer-line">
+                {t['latest_month_caption']}: {latest_month} |
+                {t['profile_summary']}: {identity}, {timeline}, {goal}, {down_payment}, Rate={rate_assumption:.2f}%
             </div>
-            <div class="small-muted" style="margin-top: 0.45rem;">
-                {t['band_label']}: {band_name} | {t['months_inventory_label']}: {fmt_num(band_inv)}
-            </div>
-        </div>
-        """,
+            """
+        ),
         unsafe_allow_html=True,
     )
-
-    st.markdown(
-        f"""
-        <div class="result-card">
-            <div class="section-title">{t['timing_suggestion']}</div>
-            <div style="font-size: 1.05rem; font-weight: 700; color: #111827; margin-top: 0.35rem;">
-                {timing_title}
-            </div>
-            <div class="small-muted" style="margin-top: 0.45rem;">
-                {t['reason']}: {timing_reason}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.caption(
-        f"{t['latest_month_caption']}: {latest_month} | "
-        f"{t['profile_summary']}: {identity}, {timeline}, {goal}, "
-        f"{down_payment}, Rate={rate_assumption:.2f}%"
-    )
+    # st.caption(
+    #     f"{t['latest_month_caption']}: {latest_month} | "
+    #     f"{t['profile_summary']}: {identity}, {timeline}, {goal}, "
+    #     f"{down_payment}, Rate={rate_assumption:.2f}%"
+    # )

@@ -502,10 +502,11 @@ def inject_css() -> None:
         .summary-value {
             font-size: 1.16rem;
             font-weight: 900;
-            line-height: 1.18;
+            line-height: 1.25;
             color: var(--text);
             margin-bottom: 0.30rem;
             word-break: break-word;
+            white-space: normal;
         }
 
         .summary-sub {
@@ -513,6 +514,10 @@ def inject_css() -> None:
             color: var(--muted);
             line-height: 1.45;
             margin-top: 0.42rem;
+        }
+
+        .summary-sub:empty {
+            display:none;
         }
 
         .section-head {
@@ -619,20 +624,17 @@ def inject_css() -> None:
             border-color: rgba(22,163,74,0.18);
         }
 
-
         .signal-chip.balanced {
             background: #fff7ed;
             color: #9a3412;
             border-color: rgba(217,119,6,0.18);
         }
 
-
         .signal-chip.hot {
             background: var(--red-bg);
             color: #991b1b;
             border-color: rgba(220,38,38,0.18);
         }
-
 
         .spotlight-card {
             height: 100%;
@@ -915,6 +917,16 @@ def plain_text(value) -> str:
     return str(value)
 
 
+def sanitize_text(value) -> str:
+    """
+    Extra-safe text sanitizer for HTML rendering.
+    Prevents accidental raw HTML from showing inside cards.
+    """
+    text = plain_text(value)
+    text = re.sub(r"<[^>]+>", "", text)
+    return text.strip()
+
+
 def fmt_num(value, decimals: int = 1) -> str:
     if value is None or pd.isna(value):
         return "N/A"
@@ -1015,11 +1027,13 @@ def signal_chip_html(state: str, label: str) -> str:
         },
     )
     state = state if state in {"soft", "balanced", "hot"} else "balanced"
+    safe_label = escape(sanitize_text(label))
+    safe_icon = escape(plain_text(icon))
     return (
         f'<span class="signal-chip {state}">'
-        f'<span class="signal-chip-icon">{escape(icon)}</span>'
-        f'<span>{escape(plain_text(label))}</span>'
-        f'</span>'
+        f'<span class="signal-chip-icon">{safe_icon}</span>'
+        f'<span>{safe_label}</span>'
+        f"</span>"
     )
 
 
@@ -1246,17 +1260,22 @@ def load_price_bands(path: Path) -> pd.DataFrame:
 # =========================================================
 # Render helpers
 # =========================================================
+def render_html(html: str) -> None:
+    st.markdown(html, unsafe_allow_html=True)
+
+
 def render_hero(t: dict) -> None:
-    st.markdown(
-        f"""
-        <div class="hero">
-            <div class="hero-chip">{escape(plain_text(t["hero_chip"]))}</div>
-            <div class="hero-title">{escape(plain_text(t["title"]))}</div>
-            <div class="hero-subtitle">{escape(plain_text(t["subtitle"]))}</div>
-            <div class="hero-note">{escape(plain_text(t["page_note"]))}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    render_html(
+        "".join(
+            [
+                '<div class="hero">',
+                f'<div class="hero-chip">{escape(sanitize_text(t["hero_chip"]))}</div>',
+                f'<div class="hero-title">{escape(sanitize_text(t["title"]))}</div>',
+                f'<div class="hero-subtitle">{escape(sanitize_text(t["subtitle"]))}</div>',
+                f'<div class="hero-note">{escape(sanitize_text(t["page_note"]))}</div>',
+                "</div>",
+            ]
+        )
     )
 
 
@@ -1269,27 +1288,31 @@ def render_summary_card(
 ) -> None:
     state_cls = f"summary-{state}" if state in {"hot", "balanced", "soft"} else ""
     badge_html = signal_chip_html(state, badge_label) if (state in {"hot", "balanced", "soft"} and badge_label) else ""
+    sub_html = f'<div class="summary-sub">{escape(sanitize_text(sub))}</div>' if sanitize_text(sub) else ""
 
-    html = f"""
-    <div class="summary-card {state_cls}">
-        <div class="summary-label">{escape(plain_text(label))}</div>
-        <div class="summary-value">{escape(plain_text(value))}</div>
-        {badge_html}
-        <div class="summary-sub">{escape(plain_text(sub))}</div>
-    </div>
-    """
-    st.markdown(html, unsafe_allow_html=True)
+    html = "".join(
+        [
+            f'<div class="summary-card {state_cls}">',
+            f'<div class="summary-label">{escape(sanitize_text(label))}</div>',
+            f'<div class="summary-value">{escape(sanitize_text(value))}</div>',
+            badge_html,
+            sub_html,
+            "</div>",
+        ]
+    )
+    render_html(html)
 
 
 def render_section_head(title: str, subtitle: str) -> None:
-    st.markdown(
-        f"""
-        <div class="section-head">
-            <div class="section-title">{escape(plain_text(title))}</div>
-            <div class="section-subtitle">{escape(plain_text(subtitle))}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    render_html(
+        "".join(
+            [
+                '<div class="section-head">',
+                f'<div class="section-title">{escape(sanitize_text(title))}</div>',
+                f'<div class="section-subtitle">{escape(sanitize_text(subtitle))}</div>',
+                "</div>",
+            ]
+        )
     )
 
 
@@ -1302,71 +1325,80 @@ def render_executive_card(
     badge_label: str | None = None,
 ) -> None:
     badge_html = signal_chip_html(state, badge_label) if (state in {"hot", "balanced", "soft"} and badge_label) else ""
-
-    html = f"""
-    <div class="executive-card">
-        <div class="executive-kicker">{escape(plain_text(kicker))}</div>
-        <div class="executive-title">{escape(plain_text(title))}</div>
-        <div class="executive-main">{escape(plain_text(main))}</div>
-        {badge_html}
-        <div class="executive-sub">{escape(plain_text(sub))}</div>
-    </div>
-    """
-    st.markdown(html, unsafe_allow_html=True)
+    html = "".join(
+        [
+            '<div class="executive-card">',
+            f'<div class="executive-kicker">{escape(sanitize_text(kicker))}</div>',
+            f'<div class="executive-title">{escape(sanitize_text(title))}</div>',
+            f'<div class="executive-main">{escape(sanitize_text(main))}</div>',
+            badge_html,
+            f'<div class="executive-sub">{escape(sanitize_text(sub))}</div>',
+            "</div>",
+        ]
+    )
+    render_html(html)
 
 
 def render_matrix_spotlight(top3_df: pd.DataFrame, t: dict) -> None:
-    html = f"""
-    <div class="spotlight-card">
-        <div class="spotlight-title">{escape(plain_text(t["matrix_spotlight"]))}</div>
-        <div class="spotlight-main">{escape(plain_text(t["matrix_spotlight_sub"]))}</div>
-        <div class="spotlight-sub">{escape(plain_text(t["matrix_note1"]))}</div>
-        <span class="spotlight-pill">{escape(plain_text(t["matrix_best_zone"]))}: {escape(plain_text(t["matrix_best_zone_text"]))}</span>
-        <div class="spotlight-title" style="margin-top:0.9rem;">{escape(plain_text(t["matrix_top3"]))}</div>
-    """
+    parts = [
+        '<div class="spotlight-card">',
+        f'<div class="spotlight-title">{escape(sanitize_text(t["matrix_spotlight"]))}</div>',
+        f'<div class="spotlight-main">{escape(sanitize_text(t["matrix_spotlight_sub"]))}</div>',
+        f'<div class="spotlight-sub">{escape(sanitize_text(t["matrix_note1"]))}</div>',
+        f'<span class="spotlight-pill">{escape(sanitize_text(t["matrix_best_zone"]))}: {escape(sanitize_text(t["matrix_best_zone_text"]))}</span>',
+        f'<div class="spotlight-title" style="margin-top:0.9rem;">{escape(sanitize_text(t["matrix_top3"]))}</div>',
+    ]
 
     if top3_df.empty:
-        html += f'<div class="spotlight-sub">{escape(plain_text(t["chart_empty"]))}</div>'
+        parts.append(f'<div class="spotlight-sub">{escape(sanitize_text(t["chart_empty"]))}</div>')
     else:
         for _, row in top3_df.iterrows():
             state = get_signal_state(row.get("months_inventory", np.nan), row.get("monthly_sell_through", np.nan))
             _, label = get_signal_badge_meta(state, t)
-            html += (
-                f'<div class="spotlight-rank">'
-                f'  <div class="spotlight-badge">{escape(plain_text(row["rank_label"]))}</div>'
-                f'  <div>'
-                f'      <div class="spotlight-band">{escape(plain_text(row["price_range"]))}</div>'
-                f'      {signal_chip_html(state, label)}'
-                f'      <div class="spotlight-meta">'
-                f'          MOI {fmt_num(row.get("months_inventory", np.nan), 1)} · '
-                f'          {escape(plain_text(t["sell_through"]))} {fmt_pct(row.get("monthly_sell_through", np.nan))} · '
-                f'          {escape(plain_text(t["opportunity_score"]))} {fmt_num(row.get("buyer_leverage_score", np.nan), 1)}'
-                f'      </div>'
-                f'  </div>'
-                f'</div>'
+            parts.extend(
+                [
+                    '<div class="spotlight-rank">',
+                    f'<div class="spotlight-badge">{escape(sanitize_text(row["rank_label"]))}</div>',
+                    "<div>",
+                    f'<div class="spotlight-band">{escape(sanitize_text(row["price_range"]))}</div>',
+                    signal_chip_html(state, label),
+                    (
+                        f'<div class="spotlight-meta">'
+                        f'MOI {fmt_num(row.get("months_inventory", np.nan), 1)} · '
+                        f'{escape(sanitize_text(t["sell_through"]))} {fmt_pct(row.get("monthly_sell_through", np.nan))} · '
+                        f'{escape(sanitize_text(t["opportunity_score"]))} {fmt_num(row.get("buyer_leverage_score", np.nan), 1)}'
+                        f"</div>"
+                    ),
+                    "</div>",
+                    "</div>",
+                ]
             )
 
-    html += f"""
-        <div class="spotlight-title" style="margin-top:0.95rem;">{escape(plain_text(t["matrix_watchout"]))}</div>
-        <div class="spotlight-sub" style="margin-bottom:0;">{escape(plain_text(t["matrix_watchout_text"]))}</div>
-    </div>
-    """
-    st.markdown(html, unsafe_allow_html=True)
+    parts.extend(
+        [
+            f'<div class="spotlight-title" style="margin-top:0.95rem;">{escape(sanitize_text(t["matrix_watchout"]))}</div>',
+            f'<div class="spotlight-sub" style="margin-bottom:0;">{escape(sanitize_text(t["matrix_watchout_text"]))}</div>',
+            "</div>",
+        ]
+    )
+    render_html("".join(parts))
 
 
 def render_top_op_card(rank: int, band: str, moi: float, score: float, sell: float, t: dict) -> None:
     state = get_signal_state(moi, sell)
     _, label = get_signal_badge_meta(state, t)
 
-    html = f"""
-    <div class="top-op-card">
-        <div class="top-op-rank">#{rank}</div>
-        <div class="top-op-band">{escape(plain_text(band))}</div>
-        {signal_chip_html(state, label)}
-        <div class="top-op-meta">MOI {fmt_num(moi, 1)} · {escape(plain_text(t["opportunity_score"]))} {fmt_num(score, 1)}</div>
-    </div>
-    """
-    st.markdown(html, unsafe_allow_html=True)
+    html = "".join(
+        [
+            '<div class="top-op-card">',
+            f'<div class="top-op-rank">#{rank}</div>',
+            f'<div class="top-op-band">{escape(sanitize_text(band))}</div>',
+            signal_chip_html(state, label),
+            f'<div class="top-op-meta">MOI {fmt_num(moi, 1)} · {escape(sanitize_text(t["opportunity_score"]))} {fmt_num(score, 1)}</div>',
+            "</div>",
+        ]
+    )
+    render_html(html)
 
 
 # =========================================================
@@ -1841,16 +1873,16 @@ def main() -> None:
 
     c1, c2 = st.columns(2, gap="large")
     with c1:
-        st.markdown(f'<div class="chart-title">{escape(plain_text(t["chart1_title"]))}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="chart-caption">{escape(plain_text(t["chart1_caption"]))}</div>', unsafe_allow_html=True)
+        render_html(f'<div class="chart-title">{escape(sanitize_text(t["chart1_title"]))}</div>')
+        render_html(f'<div class="chart-caption">{escape(sanitize_text(t["chart1_caption"]))}</div>')
         if df_m.dropna(subset=["price_range", "months_inventory"]).empty:
             st.info(t["chart_empty"])
         else:
             st.altair_chart(build_moi_chart(df_m, t), use_container_width=True)
 
     with c2:
-        st.markdown(f'<div class="chart-title">{escape(plain_text(t["chart2_title"]))}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="chart-caption">{escape(plain_text(t["chart2_caption"]))}</div>', unsafe_allow_html=True)
+        render_html(f'<div class="chart-title">{escape(sanitize_text(t["chart2_title"]))}</div>')
+        render_html(f'<div class="chart-caption">{escape(sanitize_text(t["chart2_caption"]))}</div>')
         if df_m.dropna(subset=["price_range", "monthly_sell_through"]).empty:
             st.info(t["chart_empty"])
         else:
@@ -1858,24 +1890,23 @@ def main() -> None:
 
     m1, m2 = st.columns([1.58, 0.82], gap="large")
     with m1:
-        st.markdown(f'<div class="chart-title">{escape(plain_text(t["chart3_title"]))}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="chart-caption">{escape(plain_text(t["chart3_caption"]))}</div>', unsafe_allow_html=True)
+        render_html(f'<div class="chart-title">{escape(sanitize_text(t["chart3_title"]))}</div>')
+        render_html(f'<div class="chart-caption">{escape(sanitize_text(t["chart3_caption"]))}</div>')
         if df_m.dropna(subset=["price_range", "months_inventory", "monthly_sell_through", "buyer_leverage_score"]).empty:
             st.info(t["chart_empty"])
         else:
             st.altair_chart(build_matrix_chart(df_m, top3_df, t), use_container_width=True)
 
-        st.markdown(
-            f'<div class="matrix-legend-note">• {escape(plain_text(t["matrix_note1"]))}<br>• {escape(plain_text(t["matrix_note2"]))}</div>',
-            unsafe_allow_html=True,
+        render_html(
+            f'<div class="matrix-legend-note">• {escape(sanitize_text(t["matrix_note1"]))}<br>• {escape(sanitize_text(t["matrix_note2"]))}</div>'
         )
 
     with m2:
         render_matrix_spotlight(top3_df, t)
 
     render_section_head(t["section_ranking"], t["section_ranking_sub"])
-    st.markdown(f'<div class="chart-title">{escape(plain_text(t["chart4_title"]))}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="chart-caption">{escape(plain_text(t["chart4_caption"]))}</div>', unsafe_allow_html=True)
+    render_html(f'<div class="chart-title">{escape(sanitize_text(t["chart4_title"]))}</div>')
+    render_html(f'<div class="chart-caption">{escape(sanitize_text(t["chart4_caption"]))}</div>')
 
     if df_m.dropna(subset=["price_range", "buyer_leverage_score"]).empty:
         st.info(t["chart_empty"])
@@ -1931,7 +1962,7 @@ def main() -> None:
         height=335,
     )
 
-    st.markdown(f"## {escape(plain_text(t['top3']))}")
+    st.markdown(f"## {escape(sanitize_text(t['top3']))}")
     top3_cols = st.columns(3)
     top3_list = (
         df_m.dropna(subset=["buyer_leverage_score"])
@@ -1977,94 +2008,83 @@ def main() -> None:
     _, budget_chip_label = get_signal_badge_meta(budget_state, t)
     budget_badge = signal_chip_html(budget_state, budget_chip_label)
 
-    statement_html = f"""
-    <div class="statement-card">
-        <div class="statement-kicker">{escape(plain_text(t["advisory_conclusion"]))}</div>
-        <div class="statement-main">{escape(plain_text(signal_text))}</div>
-        {budget_badge}
-        <div class="statement-sub">{escape(plain_text(band_summary))}</div>
-    </div>
-    """
-    st.markdown(statement_html, unsafe_allow_html=True)
+    statement_html = "".join(
+        [
+            '<div class="statement-card">',
+            f'<div class="statement-kicker">{escape(sanitize_text(t["advisory_conclusion"]))}</div>',
+            f'<div class="statement-main">{escape(sanitize_text(signal_text))}</div>',
+            budget_badge,
+            f'<div class="statement-sub">{escape(sanitize_text(band_summary))}</div>',
+            "</div>",
+        ]
+    )
+    render_html(statement_html)
 
-    st.markdown(
-        f"""
-        <div class="metric-strip">
-            <div class="metric-box">
-                <div class="metric-box-label">{escape(plain_text(t["budget_label"]))}</div>
-                <div class="metric-box-value">{fmt_money(budget_usd)}</div>
-            </div>
-            <div class="metric-box">
-                <div class="metric-box-label">{escape(plain_text(t["matched_band"]))}</div>
-                <div class="metric-box-value">{escape(plain_text(budget_row["price_range"]))}</div>
-            </div>
-            <div class="metric-box">
-                <div class="metric-box-label">{escape(plain_text(t["opportunity_score"]))}</div>
-                <div class="metric-box-value">{fmt_num(score)}</div>
-            </div>
-            <div class="metric-box">
-                <div class="metric-box-label">{escape(plain_text(t["inv_level"]))}</div>
-                <div class="metric-box-value">{fmt_num(inv, 2)}</div>
-            </div>
-            <div class="metric-box">
-                <div class="metric-box-label">{escape(plain_text(t["sell_through"]))}</div>
-                <div class="metric-box-value">{fmt_pct(sell_through)}</div>
-            </div>
-            <div class="metric-box">
-                <div class="metric-box-label">{escape(plain_text(t["leverage"]))}</div>
-                <div class="metric-box-value">{escape(plain_text(lev))}</div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    render_html(
+        "".join(
+            [
+                '<div class="metric-strip">',
+                f'<div class="metric-box"><div class="metric-box-label">{escape(sanitize_text(t["budget_label"]))}</div><div class="metric-box-value">{fmt_money(budget_usd)}</div></div>',
+                f'<div class="metric-box"><div class="metric-box-label">{escape(sanitize_text(t["matched_band"]))}</div><div class="metric-box-value">{escape(sanitize_text(budget_row["price_range"]))}</div></div>',
+                f'<div class="metric-box"><div class="metric-box-label">{escape(sanitize_text(t["opportunity_score"]))}</div><div class="metric-box-value">{fmt_num(score)}</div></div>',
+                f'<div class="metric-box"><div class="metric-box-label">{escape(sanitize_text(t["inv_level"]))}</div><div class="metric-box-value">{fmt_num(inv, 2)}</div></div>',
+                f'<div class="metric-box"><div class="metric-box-label">{escape(sanitize_text(t["sell_through"]))}</div><div class="metric-box-value">{fmt_pct(sell_through)}</div></div>',
+                f'<div class="metric-box"><div class="metric-box-label">{escape(sanitize_text(t["leverage"]))}</div><div class="metric-box-value">{escape(sanitize_text(lev))}</div></div>',
+                "</div>",
+            ]
+        )
     )
 
     b1, b2 = st.columns([1.05, 1.25], gap="large")
 
     with b1:
-        evidence_html = f"""
-        <div class="evidence-card">
-            <div class="card-kicker">{escape(plain_text(t["evidence_title"]))}</div>
-            <div class="card-main">{escape(plain_text(budget_row["price_range"]))}</div>
-            {budget_badge}
-            <div class="card-body">
-                <strong>{escape(plain_text(t["competition"]))}:</strong> {escape(plain_text(comp))}<br><br>
-                <strong>{escape(plain_text(t["temperature"]))}:</strong> {escape(plain_text(temp))}<br><br>
-                <strong>{escape(plain_text(t["offer_posture"]))}:</strong> {escape(plain_text(posture))}<br><br>
-                <strong>{escape(plain_text(t["why_this_band"]))}:</strong><br>
-                • {escape(plain_text(t["why_line1"]))}<br>
-                • {escape(plain_text(t["why_line2"]))}<br>
-                • {escape(plain_text(t["why_line3"]))}
-            </div>
-        </div>
-        """
-        st.markdown(evidence_html, unsafe_allow_html=True)
+        evidence_html = "".join(
+            [
+                '<div class="evidence-card">',
+                f'<div class="card-kicker">{escape(sanitize_text(t["evidence_title"]))}</div>',
+                f'<div class="card-main">{escape(sanitize_text(budget_row["price_range"]))}</div>',
+                budget_badge,
+                '<div class="card-body">',
+                f'<strong>{escape(sanitize_text(t["competition"]))}:</strong> {escape(sanitize_text(comp))}<br><br>',
+                f'<strong>{escape(sanitize_text(t["temperature"]))}:</strong> {escape(sanitize_text(temp))}<br><br>',
+                f'<strong>{escape(sanitize_text(t["offer_posture"]))}:</strong> {escape(sanitize_text(posture))}<br><br>',
+                f'<strong>{escape(sanitize_text(t["why_this_band"]))}:</strong><br>',
+                f'• {escape(sanitize_text(t["why_line1"]))}<br>',
+                f'• {escape(sanitize_text(t["why_line2"]))}<br>',
+                f'• {escape(sanitize_text(t["why_line3"]))}',
+                "</div>",
+                "</div>",
+            ]
+        )
+        render_html(evidence_html)
 
     with b2:
-        action_items = "".join([f"<li>{escape(plain_text(tip))}</li>" for tip in tips])
+        action_items = "".join([f"<li>{escape(sanitize_text(tip))}</li>" for tip in tips])
 
-        action_html = f"""
-        <div class="action-card">
-            <div class="card-kicker">{escape(plain_text(t["action_title"]))}</div>
-            <div class="card-main">{escape(plain_text(t["offer_posture"]))}: {escape(plain_text(posture))}</div>
-            <div class="card-body">
-                <ul class="action-list">
-                    {action_items}
-                </ul>
-            </div>
-        </div>
-        """
-        st.markdown(action_html, unsafe_allow_html=True)
+        action_html = "".join(
+            [
+                '<div class="action-card">',
+                f'<div class="card-kicker">{escape(sanitize_text(t["action_title"]))}</div>',
+                f'<div class="card-main">{escape(sanitize_text(t["offer_posture"]))}: {escape(sanitize_text(posture))}</div>',
+                '<div class="card-body">',
+                f'<ul class="action-list">{action_items}</ul>',
+                "</div>",
+                "</div>",
+            ]
+        )
+        render_html(action_html)
 
-        limit_body = "<br>".join([escape(plain_text(line)) for line in str(t["limitations_body"]).splitlines()])
+        limit_body = "<br>".join([escape(sanitize_text(line)) for line in str(t["limitations_body"]).splitlines()])
 
-        limit_html = f"""
-        <div class="limit-card" style="margin-top:12px;">
-            <div class="card-kicker">{escape(plain_text(t["limitations_title"]))}</div>
-            <div class="card-body">{limit_body}</div>
-        </div>
-        """
-        st.markdown(limit_html, unsafe_allow_html=True)
+        limit_html = "".join(
+            [
+                '<div class="limit-card" style="margin-top:12px;">',
+                f'<div class="card-kicker">{escape(sanitize_text(t["limitations_title"]))}</div>',
+                f'<div class="card-body">{limit_body}</div>',
+                "</div>",
+            ]
+        )
+        render_html(limit_html)
 
     with st.expander(t["details"]):
         detail_zone = budget_row.get("market_zone_en")

@@ -1,32 +1,33 @@
 from __future__ import annotations
 
+from html import escape
 from pathlib import Path
+import math
+import re
 
 import altair as alt
 import pandas as pd
 import streamlit as st
 
 st.set_page_config(
-    page_title="NC Market Pulse",
+    page_title="NC Market Pulse / 北卡市场总览",
     page_icon="📈",
     layout="wide",
 )
 
 DATA_PATH = Path("data/analytics/monthly_metrics.csv")
-
-# Allow richer Altair charts
 alt.data_transformers.disable_max_rows()
 
 
-# -----------------------------
+# =========================================================
 # i18n
-# -----------------------------
+# =========================================================
 TEXT = {
     "en": {
-        "page_title": "📊 NC Market Pulse",
-        "page_caption": "A professional dashboard for North Carolina housing market trends based on monthly analytics outputs.",
-        "lang_en": "English",
-        "lang_zh": "中文",
+        "title": "NC Market Pulse",
+        "subtitle": "Statewide market analytics for buyers, investors, and advisors to assess inventory pressure, demand shifts, and pricing conditions more efficiently.",
+        "hero_chip": "North Carolina Macro Market Analytics",
+
         "filters": "Filters",
         "month_window": "Month Window",
         "time_range": "Time Range",
@@ -37,50 +38,63 @@ TEXT = {
         "last_36m": "Last 36M",
         "ytd": "YTD",
         "all_data": "All",
-        "missing_file": "Missing data/analytics/monthly_metrics.csv.\n\nRun:\n\npython run_full_pipeline.py --workers 4",
+
+        "missing_file": "Missing `data/analytics/monthly_metrics.csv`.\n\nRun:\n\n`python run_full_pipeline.py --workers 4`",
         "missing_cols": "Missing required columns in monthly_metrics.csv:",
-        "no_data_range": "No data in selected month range.",
+        "no_data_range": "No data is available in the selected month range.",
+
         "latest_month": "Latest Month",
-        "inventory_months": "Inventory (months)",
+        "inventory_months": "Inventory (MOI)",
         "listings": "Listings",
         "sales": "Sales",
         "median_price": "Median Price",
+
         "headline_title": "North Carolina Housing Snapshot",
-        "headline_caption": "A macro view of inventory, demand, and pricing dynamics.",
-        "inventory_chart_title": "NC Inventory Trend (MOI, Months of Inventory)",
-        "inventory_chart_caption": "MOI is sourced from or derived from NC REALTORS monthly market reports. Higher values usually indicate stronger buyer leverage.",
-        "ls_title": "Listings vs Sales",
-        "ls_caption": "When listings rise faster than sales, buyer negotiation power usually increases.",
+        "headline_caption": "A statewide view of inventory pressure, demand conditions, and pricing direction.",
+
+        "section_charts": "Market Structure",
+        "section_charts_sub": "Use statewide signals to understand inventory, supply-demand balance, and pricing conditions before moving into local market and property-level analysis.",
+
+        "inventory_chart_title": "Inventory Pressure Trend",
+        "inventory_chart_caption": "Use Months of Inventory (MOI) to assess current choice and competition in the market. In general, higher MOI means more buyer choice and less competition, while lower MOI usually signals a tighter environment.",
+
+        "ls_title": "Supply vs Demand Trend",
+        "ls_caption": "By rebasing listings and sales to the same starting point (=100), this chart makes directional comparison easier. It helps users see whether supply is expanding faster than demand, or whether demand is recovering more quickly than supply.",
+        "indexed_note": "Indexed View (Start = 100)",
+
         "price_title": "Median Price Trend",
-        "price_caption": "Price growth slowdown may indicate a cooling market.",
+        "price_caption": "Use the statewide median price trend to quickly understand the current pricing environment. This helps buyers, investors, and advisors judge whether price pressure is still building, stabilizing, or softening before moving into more detailed market comparisons.",
+        "price_spotlight": "Price Context",
+        "price_spotlight_sub": "Start with the statewide price trend to understand the broader pricing backdrop, then evaluate cities, neighborhoods, and individual properties with better context.",
 
         "market_signal": "NC Market Signal",
         "signal_summary": "Signal Summary",
 
-        "current_moi_zone": "Current MOI Zone",
+        "current_moi_zone": "Current MOI Position",
         "demand_signal": "Demand Signal",
         "price_signal": "Price Signal",
         "supply_signal": "Supply Signal",
-        "moi_trend_3m": "MOI Trend (3M Rolling)",
-        "overall_market": "Overall Market",
+        "moi_trend_3m": "MOI Trend (3M)",
+        "overall_market": "Overall Market Position",
 
-        "how_to_read": "How to Read This Dashboard",
+        "how_to_read": "How to Read This Page",
         "how_to_read_text": (
-            "Current MOI Zone shows where the market stands right now based on the latest inventory level. "
+            "This is a statewide macro market dashboard designed to help users understand the broader market environment before moving into city, neighborhood, and property-level analysis. "
+            "Current MOI Position shows where the market stands now based on the latest inventory level. "
             "Demand Signal uses Sales YoY, Price Signal uses Price YoY, and Supply Signal uses Listings YoY. "
-            "MOI Trend compares the latest 3-month rolling average of inventory with the previous 3-month rolling average. "
-            "Overall Market combines current MOI zone, YoY signals, and short-term inventory trend into one market interpretation."
+            "The 3-month MOI trend compares the latest 3-month rolling average with the prior 3-month rolling average to show short-term inventory direction. "
+            "Overall Market Position combines current MOI, YoY signals, and short-term inventory trend into one higher-level market read. "
+            "This page is useful for framing market conditions, improving communication, and supporting decision-making, but it should not replace local submarket, neighborhood, or property-level analysis."
         ),
-        "show_latest_rows": "Show latest rows",
+        "show_latest_rows": "Show Latest Rows",
 
         "market_zone_table_title": "MOI Interpretation Guide",
         "moi_range": "MOI Range",
-        "market_interpretation": "Market Interpretation",
-        "seller_zone": "Seller-Leaning",
-        "balanced_zone": "Balanced",
-        "buyer_zone": "Buyer-Leaning",
+        "market_interpretation": "Interpretation",
+        "seller_zone": "More Competitive",
+        "balanced_zone": "Relatively Balanced",
+        "buyer_zone": "More Buyer Room",
 
-        "insight_title": "Auto Insight",
         "report_month": "Report Month",
         "months_inventory": "MOI",
         "mom_inventory_pct": "MoM Inventory %",
@@ -100,28 +114,85 @@ TEXT = {
         "Expanding": "Expanding",
         "Tightening": "Tightening",
 
-        "Buyer-Leaning": "Buyer-Leaning",
-        "Seller-Leaning": "Seller-Leaning",
-        "Balanced": "Balanced",
+        "Buyer-Leaning": "More Buyer Room",
+        "Seller-Leaning": "More Competitive",
+        "Balanced": "Relatively Balanced",
 
         "market_zone": "Market Zone",
-        "latest_value_label": "Latest Value",
-        "source_note": "Source note",
-        "source_note_text": "MOI is an industry-standard measure. In many MLS and REALTOR reports, it is sourced directly from the market report or derived from listing and sales fields.",
+        "source_note": "Methodology",
+        "source_note_text": (
+            "Months of Inventory (MOI) = current listings divided by recent monthly sales pace. "
+            "The MOI interpretation on this page is aligned with the Price Band Opportunities page: "
+            "< 4 = more competitive, 4–6 = relatively balanced, > 6 = more buyer room. "
+            "This is a market-structure metric, not a guarantee of negotiability for any individual property."
+        ),
         "value": "Value",
         "series": "Series",
-        "selected_data_points": "Selected data points",
+        "selected_data_points": "Selected Data Points",
 
         "as_of": "As of",
         "sales_yoy": "Sales YoY",
         "price_yoy": "Price YoY",
         "listings_yoy": "Listings YoY",
+
+        "macro_note_title": "What this page is most useful for",
+        "macro_note_body": (
+            "- Understanding statewide market direction\n"
+            "- Framing whether inventory pressure is easing or tightening\n"
+            "- Giving buyers, investors, and clients a clearer macro context before discussing local choices\n\n"
+            "**Not best used for directly answering:**\n"
+            "- Whether a specific home is priced correctly\n"
+            "- Whether one property can definitely be negotiated down\n"
+            "- What one neighborhood will do next month"
+        ),
+
+        "section_signal": "Macro Market Read",
+        "section_signal_sub": "Convert statewide data into a clearer market interpretation that is easier to use in decisions, comparisons, and client conversations.",
+
+        "metric_latest_month": "Latest Month",
+        "metric_data_span": "Data Window",
+        "metric_market_bias": "Market Position",
+        "metric_moi_trend": "Short-Term MOI Trend",
+        "metric_price_signal": "Price Direction",
+
+        "guide_title": "How to Read the Market",
+        "guide_main": "Start at the statewide level to understand the broader market environment, then move into cities, neighborhoods, and specific properties with a stronger decision framework.",
+        "guide_sub": "This page helps buyers, investors, and advisors build a shared view of market conditions before discussing area selection, home search priorities, pricing, or negotiation strategy.",
+
+        "signal_card_1_sub": "Based on latest MOI",
+        "signal_card_2_sub": "Based on Sales YoY",
+        "signal_card_3_sub": "Based on Price YoY",
+        "signal_card_4_sub": "Based on Listings YoY",
+        "signal_card_5_sub": "Combined market interpretation",
+
+        "narrative_title": "Current Market Read",
+        "detail_title": "Key Indicators",
+        "signal_table_title": "Signal Breakdown",
+
+        "inventory_pressure_axis": "Months of Inventory",
+        "price_axis": "Median Price",
+        "indexed_axis": "Indexed Trend (Start = 100)",
+
+        "table_metric": "Metric",
+        "table_value": "Value",
+        "table_signal": "Signal",
+        "table_basis": "Basis",
+
+        "price_up_mild": "Mild Upward Pressure",
+        "price_up_clear": "Clear Upward Pressure",
+        "price_flat": "Largely Stable",
+        "price_down_mild": "Mild Softening",
+        "price_down_clear": "Clear Softening",
+
+        "increase": "Up",
+        "decrease": "Down",
+        "flat_move": "Flat",
     },
     "zh": {
-        "page_title": "📊 北卡房地产市场脉搏",
-        "page_caption": "基于月度分析结果构建的北卡房地产市场专业仪表盘。",
-        "lang_en": "English",
-        "lang_zh": "中文",
+        "title": "北卡市场总览",
+        "subtitle": "面向买家、投资人和房产顾问的州级市场分析页面，用于更高效地判断库存压力、供需变化与价格环境。",
+        "hero_chip": "北卡宏观市场分析",
+
         "filters": "筛选条件",
         "month_window": "月份范围",
         "time_range": "时间范围",
@@ -132,58 +203,71 @@ TEXT = {
         "last_36m": "最近36个月",
         "ytd": "今年至今",
         "all_data": "全部",
-        "missing_file": "缺少 data/analytics/monthly_metrics.csv 文件。\n\n请运行：\n\npython run_full_pipeline.py --workers 4",
+
+        "missing_file": "缺少 `data/analytics/monthly_metrics.csv` 文件。\n\n请运行：\n\n`python run_full_pipeline.py --workers 4`",
         "missing_cols": "monthly_metrics.csv 缺少必要字段：",
         "no_data_range": "当前选择的月份范围内没有数据。",
+
         "latest_month": "最新月份",
-        "inventory_months": "库存（月）",
-        "listings": "新挂牌",
+        "inventory_months": "库存（MOI）",
+        "listings": "挂牌量",
         "sales": "成交量",
         "median_price": "中位价",
+
         "headline_title": "北卡房地产市场概览",
-        "headline_caption": "从库存、需求和价格三个维度观察市场变化。",
-        "inventory_chart_title": "北卡库存趋势（MOI, Months of Inventory）",
-        "inventory_chart_caption": "MOI 由 NC REALTORS 月报直接提供或基于其字段整理。数值越高，通常意味着库存更充足、买方议价能力更强。",
-        "ls_title": "新挂牌 vs 成交",
-        "ls_caption": "当挂牌增长快于成交时，买方谈判能力通常增强。",
+        "headline_caption": "从全州维度观察库存压力、供需关系与价格方向。",
+
+        "section_charts": "市场结构",
+        "section_charts_sub": "先从州级层面把握库存、供需与价格环境，再进入城市、社区和具体房源层面的比较与判断。",
+
+        "inventory_chart_title": "库存压力趋势",
+        "inventory_chart_caption": "用库存月数观察当前市场的选择空间与竞争强弱。一般来说，MOI 越高，买方可选房源越多，市场竞争压力越小；MOI 越低，通常意味着竞争更强。",
+
+        "ls_title": "供需趋势对比",
+        "ls_caption": "这张图把挂牌量和成交量统一换算到同一个起点（=100），更适合直接比较趋势方向。它可以帮助用户更快判断当前市场是供给扩张快于需求，还是需求恢复快于供给。",
+        "indexed_note": "指数化视图（起点 = 100）",
+
         "price_title": "中位价趋势",
-        "price_caption": "价格涨幅放缓，可能意味着市场正在降温。",
+        "price_caption": "通过州级中位价趋势快速把握当前市场的价格环境，帮助买家、投资人和房产顾问判断价格压力是在延续、趋稳还是放缓，再进入更具体的区域与房源比较。",
+        "price_spotlight": "价格环境判断",
+        "price_spotlight_sub": "先从州级价格趋势判断当前市场价格环境，再结合城市、社区和具体房源做进一步比较，有助于更快区分整体价格背景与个别房源定价差异。",
 
         "market_signal": "北卡市场信号",
         "signal_summary": "信号总结",
 
-        "current_moi_zone": "当前 MOI 区间",
+        "current_moi_zone": "当前 MOI 位置",
         "demand_signal": "需求信号",
         "price_signal": "价格信号",
         "supply_signal": "供给信号",
-        "moi_trend_3m": "MOI 趋势（3个月滚动）",
-        "overall_market": "整体市场",
+        "moi_trend_3m": "MOI 趋势（3个月）",
+        "overall_market": "整体市场位置",
 
-        "how_to_read": "这块仪表盘怎么读",
+        "how_to_read": "这页怎么读",
         "how_to_read_text": (
-            "当前 MOI 区间用于判断市场此刻所处的位置。"
-            "需求信号使用 Sales YoY，价格信号使用 Price YoY，供给信号使用 Listings YoY。"
-            "MOI 趋势通过比较“最近一个3个月滚动均值”和“前一个3个月滚动均值”来判断短期库存压力。"
-            "整体市场会综合当前 MOI 区间、同比信号和短期库存趋势，给出最终市场定性。"
+            "这是一页州级宏观市场分析页面，适合在进入城市、社区和具体房源分析之前，先帮助用户建立对当前市场环境的整体判断。"
+            "“当前 MOI 位置”用于判断市场此刻所处的位置。"
+            "“需求信号”使用成交同比，“价格信号”使用价格同比，“供给信号”使用挂牌同比。"
+            "“3个月 MOI 趋势”通过比较最近一个3个月滚动均值与前一个3个月滚动均值来判断短期库存方向。"
+            "“整体市场位置”会综合当前 MOI、同比信号与短期库存趋势，形成一个更适合用于判断与沟通的宏观结论。"
+            "这页适合用于建立市场框架、提升沟通效率与辅助决策，但不能替代具体城市、具体社区与具体房源层面的分析。"
         ),
         "show_latest_rows": "查看最近数据",
 
         "market_zone_table_title": "MOI 市场区间说明",
-        "moi_range": "MOI区间",
-        "market_interpretation": "市场解读",
-        "seller_zone": "偏卖方市场",
-        "balanced_zone": "均衡市场",
-        "buyer_zone": "偏买方市场",
+        "moi_range": "MOI 区间",
+        "market_interpretation": "解读",
+        "seller_zone": "竞争偏强",
+        "balanced_zone": "相对平衡",
+        "buyer_zone": "买方空间较大",
 
-        "insight_title": "自动解读",
         "report_month": "报告月份",
         "months_inventory": "MOI",
-        "mom_inventory_pct": "库存环比%",
-        "mom_sales_pct": "成交环比%",
-        "mom_price_pct": "价格环比%",
-        "yoy_listings_pct": "挂牌同比%",
-        "yoy_sales_pct": "成交同比%",
-        "yoy_price_pct": "价格同比%",
+        "mom_inventory_pct": "库存环比 %",
+        "mom_sales_pct": "成交环比 %",
+        "mom_price_pct": "价格环比 %",
+        "yoy_listings_pct": "挂牌同比 %",
+        "yoy_sales_pct": "成交同比 %",
+        "yoy_price_pct": "价格同比 %",
 
         "Rising": "上升",
         "Falling": "下降",
@@ -195,14 +279,18 @@ TEXT = {
         "Expanding": "扩张",
         "Tightening": "收紧",
 
-        "Buyer-Leaning": "偏买方市场",
-        "Seller-Leaning": "偏卖方市场",
-        "Balanced": "均衡市场",
+        "Buyer-Leaning": "买方空间较大",
+        "Seller-Leaning": "竞争偏强",
+        "Balanced": "相对平衡",
 
         "market_zone": "市场区间",
-        "latest_value_label": "最新值",
-        "source_note": "来源说明",
-        "source_note_text": "MOI 是房地产行业常用指标。在很多 MLS / REALTOR 市场报告中，它要么直接由报告给出，要么基于挂牌与成交字段计算得到。",
+        "source_note": "方法说明",
+        "source_note_text": (
+            "MOI（库存月数）= 当前挂牌量 ÷ 近期平均月成交速度。"
+            "本页对 MOI 的解读与 Price Band Opportunities 页面保持一致："
+            "< 4 = 竞争偏强，4–6 = 相对平衡，> 6 = 买方空间较大。"
+            "它反映的是市场结构，不代表某一套房一定能谈价。"
+        ),
         "value": "数值",
         "series": "系列",
         "selected_data_points": "当前数据点数",
@@ -211,6 +299,59 @@ TEXT = {
         "sales_yoy": "成交同比",
         "price_yoy": "价格同比",
         "listings_yoy": "挂牌同比",
+
+        "macro_note_title": "这页最适合帮助回答什么问题",
+        "macro_note_body": (
+            "- 理解北卡全州市场方向\n"
+            "- 判断库存压力是在缓解还是收紧\n"
+            "- 在讨论局部区域之前，先建立对当前市场环境的整体认识\n\n"
+            "**不适合直接回答：**\n"
+            "- 某一套房是否定价正确\n"
+            "- 某套房是否一定能谈下来\n"
+            "- 某个社区下个月一定会怎么走"
+        ),
+
+        "section_signal": "宏观市场解读",
+        "section_signal_sub": "把州级市场数据转化为更容易理解、也更方便用于判断、比较与沟通的市场结论。",
+
+        "metric_latest_month": "最新月份",
+        "metric_data_span": "数据区间",
+        "metric_market_bias": "市场位置",
+        "metric_moi_trend": "短期 MOI 趋势",
+        "metric_price_signal": "价格方向",
+
+        "guide_title": "宏观市场阅读方式",
+        "guide_main": "先从州级层面判断当前市场环境，再进入城市、社区和具体房源层面的比较，更有助于理解价格、库存和竞争强弱之间的关系。",
+        "guide_sub": "这页适合帮助买家、投资人和房产顾问先建立统一的市场认知，再进一步讨论区域选择、看房优先级、定价判断和交易策略。",
+
+        "signal_card_1_sub": "基于最新 MOI",
+        "signal_card_2_sub": "基于成交同比",
+        "signal_card_3_sub": "基于价格同比",
+        "signal_card_4_sub": "基于挂牌同比",
+        "signal_card_5_sub": "综合后的市场判断",
+
+        "narrative_title": "当前市场结论",
+        "detail_title": "关键指标",
+        "signal_table_title": "信号拆解",
+
+        "inventory_pressure_axis": "库存月数",
+        "price_axis": "中位价",
+        "indexed_axis": "指数化趋势（起点 = 100）",
+
+        "table_metric": "指标",
+        "table_value": "当前值",
+        "table_signal": "判断",
+        "table_basis": "依据",
+
+        "price_up_mild": "温和上行",
+        "price_up_clear": "明显上行",
+        "price_flat": "大致稳定",
+        "price_down_mild": "温和走软",
+        "price_down_clear": "明显走软",
+
+        "increase": "增加",
+        "decrease": "减少",
+        "flat_move": "持平",
     },
 }
 
@@ -219,9 +360,686 @@ def tr(key: str, lang: str) -> str:
     return TEXT[lang].get(key, key)
 
 
-# -----------------------------
-# data loading
-# -----------------------------
+# =========================================================
+# CSS
+# =========================================================
+def inject_css() -> None:
+    st.markdown(
+        """
+        <style>
+        :root{
+            --bg:#f3f6fb;
+            --card:#ffffff;
+            --text:#0f172a;
+            --muted:#64748b;
+            --line:#dbe3ee;
+            --line-soft:#edf2f7;
+            --green:#16a34a;
+            --green-bg:#ecfdf3;
+            --amber:#d97706;
+            --amber-bg:#fff7ed;
+            --red:#dc2626;
+            --red-bg:#fef2f2;
+            --blue:#2563eb;
+            --blue-soft:#eff6ff;
+            --shadow:0 10px 26px rgba(15, 23, 42, 0.06);
+            --shadow-strong:0 18px 50px rgba(15, 23, 42, 0.12);
+        }
+
+        html, body, [class*="css"] {
+            font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+        }
+
+        .stApp {
+            background:
+                radial-gradient(circle at top left, rgba(37,99,235,0.04), transparent 20%),
+                radial-gradient(circle at top right, rgba(14,165,233,0.03), transparent 18%),
+                linear-gradient(180deg, #f8fafc 0%, #f3f6fb 100%);
+        }
+
+        .block-container {
+            max-width: 1460px;
+            padding-top: 0.8rem;
+            padding-bottom: 2.6rem;
+        }
+
+        section[data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+            border-right: 1px solid #e5e7eb;
+        }
+
+        .hero {
+            position: relative;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top right, rgba(56,189,248,0.16), transparent 22%),
+                linear-gradient(135deg, #08111f 0%, #0f172a 35%, #172554 100%);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 28px;
+            padding: 30px 32px 28px 32px;
+            box-shadow: var(--shadow-strong);
+            color: #ffffff;
+            margin-bottom: 1.25rem;
+        }
+
+        .hero-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0.42rem 0.78rem;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.12);
+            color: rgba(255,255,255,0.94);
+            font-size: 0.74rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 0.9rem;
+        }
+
+        .hero-title {
+            font-size: 2.04rem;
+            font-weight: 900;
+            line-height: 1.05;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.38rem;
+        }
+
+        .hero-subtitle {
+            font-size: 1rem;
+            color: rgba(255,255,255,0.92);
+            margin-bottom: 0.45rem;
+            line-height: 1.66;
+            max-width: 1120px;
+        }
+
+        .summary-card,
+        .signal-card,
+        .narrative-card,
+        .guide-card,
+        .spotlight-card,
+        .metric-box,
+        .table-card,
+        .chart-card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            box-shadow: var(--shadow);
+        }
+
+        .summary-card {
+            min-height: 138px;
+            padding: 16px 18px;
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+            margin-bottom: 0.35rem;
+        }
+
+        .summary-card::after {
+            content:"";
+            position:absolute;
+            top:0;
+            right:0;
+            width:86px;
+            height:86px;
+            background: radial-gradient(circle, rgba(37,99,235,0.06) 0%, rgba(37,99,235,0) 68%);
+            pointer-events:none;
+        }
+
+        .summary-hot { border-left: 4px solid var(--red); }
+        .summary-balanced { border-left: 4px solid #f59e0b; }
+        .summary-soft { border-left: 4px solid var(--green); }
+
+        .summary-label {
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 0.38rem;
+        }
+
+        .summary-value {
+            font-size: 1.16rem;
+            font-weight: 900;
+            line-height: 1.25;
+            color: var(--text);
+            margin-bottom: 0.30rem;
+            word-break: break-word;
+            white-space: normal;
+        }
+
+        .summary-sub {
+            font-size: 0.88rem;
+            color: var(--muted);
+            line-height: 1.45;
+            margin-top: 0.42rem;
+        }
+
+        .summary-sub:empty {
+            display:none;
+        }
+
+        .section-head {
+            margin-top: 1.1rem;
+            margin-bottom: 0.9rem;
+        }
+
+        .section-title {
+            font-size: 1.18rem;
+            font-weight: 900;
+            color: var(--text);
+            letter-spacing: -0.01em;
+            margin-bottom: 0.08rem;
+        }
+
+        .section-subtitle {
+            font-size: 0.93rem;
+            color: var(--muted);
+            line-height: 1.58;
+        }
+
+        .chart-card {
+            padding: 18px 18px 14px 18px;
+            background: linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
+            margin-top: 0.40rem;
+            margin-bottom: 1.65rem;
+        }
+
+        .chart-title {
+            font-size: 1.02rem;
+            font-weight: 860;
+            color: var(--text);
+            margin-bottom: 0.16rem;
+        }
+
+        .chart-caption {
+            font-size: 0.90rem;
+            color: var(--muted);
+            line-height: 1.56;
+            margin-bottom: 0.90rem;
+            max-width: 1120px;
+        }
+
+        .signal-card {
+            min-height: 162px;
+            padding: 18px 20px;
+            background: linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
+            margin-bottom: 0.90rem;
+        }
+
+        .signal-kicker {
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--muted);
+            margin-bottom: 0.35rem;
+        }
+
+        .signal-main {
+            font-size: 1.10rem;
+            font-weight: 900;
+            line-height: 1.18;
+            color: var(--text);
+            margin-bottom: 0.34rem;
+        }
+
+        .signal-sub {
+            font-size: 0.90rem;
+            color: var(--muted);
+            line-height: 1.56;
+            margin-top: 0.42rem;
+        }
+
+        .signal-chip {
+            display:inline-flex;
+            align-items:center;
+            gap:8px;
+            padding: 0.38rem 0.70rem;
+            border-radius: 999px;
+            font-size: 0.76rem;
+            font-weight: 860;
+            line-height: 1;
+            white-space: nowrap;
+            margin-top: 2px;
+            border: 1px solid transparent;
+        }
+
+        .signal-chip-icon {
+            width: auto;
+            height: auto;
+            border-radius: 0;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-size: 0.90rem;
+            font-weight: 900;
+            flex: 0 0 auto;
+            background: transparent !important;
+            color: inherit !important;
+        }
+
+        .signal-chip.soft {
+            background: var(--green-bg);
+            color: #166534;
+            border-color: rgba(22,163,74,0.18);
+        }
+
+        .signal-chip.balanced {
+            background: #fff7ed;
+            color: #9a3412;
+            border-color: rgba(217,119,6,0.18);
+        }
+
+        .signal-chip.hot {
+            background: var(--red-bg);
+            color: #991b1b;
+            border-color: rgba(220,38,38,0.18);
+        }
+
+        .narrative-card,
+        .guide-card,
+        .spotlight-card,
+        .table-card {
+            padding: 18px 20px;
+            border-radius: 20px;
+            margin-bottom: 1rem;
+        }
+
+        .spotlight-card {
+            background:
+                radial-gradient(circle at top right, rgba(56,189,248,0.10), transparent 24%),
+                linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        }
+
+        .card-kicker {
+            font-size: 0.73rem;
+            font-weight: 860;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 0.32rem;
+        }
+
+        .card-main {
+            font-size: 1rem;
+            font-weight: 850;
+            color: var(--text);
+            line-height: 1.34;
+        }
+
+        .card-body {
+            margin-top: 0.40rem;
+            font-size: 0.92rem;
+            color: var(--muted);
+            line-height: 1.68;
+        }
+
+        .card-body strong {
+            color: var(--text);
+        }
+
+        .metric-strip {
+            display:grid;
+            grid-template-columns: repeat(4, minmax(0,1fr));
+            gap: 12px;
+            margin-top: 0.65rem;
+            margin-bottom: 0.15rem;
+        }
+
+        .metric-box {
+            padding: 13px 14px;
+            border-radius: 16px;
+        }
+
+        .metric-box-label {
+            font-size: 0.71rem;
+            font-weight: 800;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 0.28rem;
+        }
+
+        .metric-box-value {
+            font-size: 1rem;
+            font-weight: 860;
+            color: var(--text);
+            line-height: 1.16;
+        }
+
+        .signal-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            margin-top: 0.5rem;
+        }
+
+        .signal-table th {
+            background: #f8fafc;
+            color: var(--muted);
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            text-align: left;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .signal-table td {
+            padding: 13px 14px;
+            border-bottom: 1px solid var(--line-soft);
+            vertical-align: middle;
+            font-size: 0.93rem;
+            color: var(--text);
+        }
+
+        .signal-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .table-metric {
+            font-weight: 820;
+            color: var(--text);
+        }
+
+        div[data-testid="stDataFrame"], .stDataFrame {
+            border-radius: 18px;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow);
+        }
+
+        .stExpander {
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            margin-top: 0.75rem;
+        }
+
+        @media (max-width: 1200px) {
+            .metric-strip {
+                grid-template-columns: repeat(2, minmax(0,1fr));
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# =========================================================
+# Helpers
+# =========================================================
+def plain_text(value) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
+def sanitize_text(value) -> str:
+    text = plain_text(value)
+    text = re.sub(r"<[^>]+>", "", text)
+    return text.strip()
+
+
+def render_html(html: str) -> None:
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def fmt_int(x) -> str:
+    if x is None or pd.isna(x):
+        return "N/A"
+    return f"{int(round(float(x))):,}"
+
+
+def fmt_float(x, digits: int = 2) -> str:
+    if x is None or pd.isna(x):
+        return "N/A"
+    return f"{float(x):.{digits}f}"
+
+
+def fmt_pct(x, digits: int = 1) -> str:
+    if x is None or pd.isna(x):
+        return "N/A"
+    return f"{float(x):.{digits}f}%"
+
+
+def fmt_money(x) -> str:
+    if x is None or pd.isna(x):
+        return "N/A"
+    return f"${float(x):,.0f}"
+
+
+def latest_value(df: pd.DataFrame, col: str):
+    if col not in df.columns:
+        return None
+    s = df[col].dropna()
+    return s.iloc[-1] if len(s) else None
+
+
+def localized_label(raw_key: str, lang: str) -> str:
+    return tr(raw_key, lang)
+
+
+def price_direction_phrase(yoy_price: float | None, lang: str) -> str:
+    if yoy_price is None or pd.isna(yoy_price):
+        return tr("price_flat", lang)
+
+    x = float(yoy_price)
+    if x >= 5:
+        return tr("price_up_clear", lang)
+    if x >= 1:
+        return tr("price_up_mild", lang)
+    if x <= -5:
+        return tr("price_down_clear", lang)
+    if x <= -1:
+        return tr("price_down_mild", lang)
+    return tr("price_flat", lang)
+
+
+def movement_text(x, lang: str, digits: int = 1) -> str:
+    if x is None or pd.isna(x):
+        return "N/A"
+    x = float(x)
+    if x > 0:
+        return f'{tr("increase", lang)} {abs(x):.{digits}f}%'
+    if x < 0:
+        return f'{tr("decrease", lang)} {abs(x):.{digits}f}%'
+    return f'{tr("flat_move", lang)} 0.0%'
+
+
+def nice_axis_domain(
+    series: pd.Series,
+    *,
+    zero_floor: bool = False,
+    pad_ratio: float = 0.12,
+    min_span: float = 1.0,
+    min_upper: float | None = None,
+) -> list[float] | None:
+    s = pd.to_numeric(series, errors="coerce").dropna()
+    if s.empty:
+        return None
+
+    y_min = float(s.min())
+    y_max = float(s.max())
+
+    if math.isclose(y_min, y_max):
+        pad = max(abs(y_min) * 0.15, min_span / 2)
+        low = y_min - pad
+        high = y_max + pad
+    else:
+        span = max(y_max - y_min, min_span)
+        pad = span * pad_ratio
+        low = y_min - pad
+        high = y_max + pad
+
+    if zero_floor:
+        low = 0
+
+    span2 = max(high - low, min_span)
+    rough_step = span2 / 6 if span2 > 0 else 1
+
+    mag = 10 ** math.floor(math.log10(rough_step)) if rough_step > 0 else 1
+    normalized = rough_step / mag
+
+    if normalized <= 1:
+        nice_step = 1 * mag
+    elif normalized <= 2:
+        nice_step = 2 * mag
+    elif normalized <= 2.5:
+        nice_step = 2.5 * mag
+    elif normalized <= 5:
+        nice_step = 5 * mag
+    else:
+        nice_step = 10 * mag
+
+    nice_low = math.floor(low / nice_step) * nice_step
+    nice_high = math.ceil(high / nice_step) * nice_step
+
+    if zero_floor:
+        nice_low = 0
+
+    if min_upper is not None:
+        nice_high = max(nice_high, float(min_upper))
+
+    if nice_high <= nice_low:
+        nice_high = nice_low + max(min_span, 1)
+
+    return [float(nice_low), float(nice_high)]
+
+
+# =========================================================
+# CSS-aligned UI helpers
+# =========================================================
+def get_signal_badge_meta(state: str, lang: str):
+    if state == "soft":
+        label = tr("Buyer-Leaning", lang)
+        return "🟢", label
+    if state == "hot":
+        label = tr("Seller-Leaning", lang)
+        return "🔴", label
+    label = tr("Balanced", lang)
+    return "🟡", label
+
+
+def signal_chip_html(label: str, state: str) -> str:
+    state = state if state in {"soft", "balanced", "hot"} else "balanced"
+    icon, _ = get_signal_badge_meta(state, "en")
+    safe_label = escape(sanitize_text(label))
+    safe_icon = escape(plain_text(icon))
+    return (
+        f'<span class="signal-chip {state}">'
+        f'<span class="signal-chip-icon">{safe_icon}</span>'
+        f'<span>{safe_label}</span>'
+        f"</span>"
+    )
+
+
+def render_hero(lang: str) -> None:
+    render_html(
+        "".join(
+            [
+                '<div class="hero">',
+                f'<div class="hero-chip">{escape(sanitize_text(tr("hero_chip", lang)))}</div>',
+                f'<div class="hero-title">{escape(sanitize_text(tr("title", lang)))}</div>',
+                f'<div class="hero-subtitle">{escape(sanitize_text(tr("subtitle", lang)))}</div>',
+                "</div>",
+            ]
+        )
+    )
+
+
+def render_summary_card(
+    label: str,
+    value: str,
+    sub: str = "",
+    state: str | None = None,
+    badge_label: str | None = None,
+) -> None:
+    state_cls = f"summary-{state}" if state in {"hot", "balanced", "soft"} else ""
+    badge_html = signal_chip_html(badge_label, state) if (state in {"hot", "balanced", "soft"} and badge_label) else ""
+    sub_html = f'<div class="summary-sub">{escape(sanitize_text(sub))}</div>' if sanitize_text(sub) else ""
+
+    html = "".join(
+        [
+            f'<div class="summary-card {state_cls}">',
+            f'<div class="summary-label">{escape(sanitize_text(label))}</div>',
+            f'<div class="summary-value">{escape(sanitize_text(value))}</div>',
+            badge_html,
+            sub_html,
+            "</div>",
+        ]
+    )
+    render_html(html)
+
+
+def render_section_head(title: str, subtitle: str) -> None:
+    render_html(
+        "".join(
+            [
+                '<div class="section-head">',
+                f'<div class="section-title">{escape(sanitize_text(title))}</div>',
+                f'<div class="section-subtitle">{escape(sanitize_text(subtitle))}</div>',
+                "</div>",
+            ]
+        )
+    )
+
+
+def render_chart_header(title: str, caption: str) -> None:
+    render_html(
+        f"""
+        <div class="chart-card">
+            <div class="chart-title">{escape(sanitize_text(title))}</div>
+            <div class="chart-caption">{escape(sanitize_text(caption))}</div>
+        </div>
+        """
+    )
+
+
+def render_signal_card(
+    kicker: str,
+    main: str,
+    chip_label: str,
+    chip_state: str,
+    sub: str,
+) -> None:
+    html = "".join(
+        [
+            '<div class="signal-card">',
+            f'<div class="signal-kicker">{escape(sanitize_text(kicker))}</div>',
+            f'<div class="signal-main">{escape(sanitize_text(main))}</div>',
+            signal_chip_html(chip_label, chip_state),
+            f'<div class="signal-sub">{escape(sanitize_text(sub))}</div>',
+            "</div>",
+        ]
+    )
+    render_html(html)
+
+
+def render_metric_strip(items: list[tuple[str, str]]) -> None:
+    parts = ['<div class="metric-strip">']
+    for label, value in items:
+        parts.append(
+            f'<div class="metric-box">'
+            f'<div class="metric-box-label">{escape(sanitize_text(label))}</div>'
+            f'<div class="metric-box-value">{escape(sanitize_text(value))}</div>'
+            f'</div>'
+        )
+    parts.append("</div>")
+    render_html("".join(parts))
+
+
+# =========================================================
+# Data loading
+# =========================================================
 @st.cache_data(ttl=60)
 def load_monthly_metrics(path: Path) -> pd.DataFrame:
     if not path.exists():
@@ -258,51 +1076,13 @@ def load_monthly_metrics(path: Path) -> pd.DataFrame:
     return df
 
 
-# -----------------------------
-# formatting helpers
-# -----------------------------
-def fmt_int(x) -> str:
-    if x is None or pd.isna(x):
-        return "N/A"
-    return f"{int(x):,}"
-
-
-def fmt_float(x, digits: int = 2) -> str:
-    if x is None or pd.isna(x):
-        return "N/A"
-    return f"{x:.{digits}f}"
-
-
-def fmt_pct(x, digits: int = 1) -> str:
-    if x is None or pd.isna(x):
-        return "N/A"
-    return f"{x:.{digits}f}%"
-
-
-def latest_value(df: pd.DataFrame, col: str):
-    if col not in df.columns:
-        return None
-    s = df[col].dropna()
-    return s.iloc[-1] if len(s) else None
-
-
-def localized_label(raw_key: str, lang: str) -> str:
-    return tr(raw_key, lang)
-
-
-# -----------------------------
-# signal logic
-# -----------------------------
+# =========================================================
+# Signal logic
+# =========================================================
 def moi_zone(moi: float | None) -> str:
-    """
-    Current market position based on latest MOI:
-    - < 5 => Seller-Leaning
-    - 5 to 6 => Balanced
-    - > 6 => Buyer-Leaning
-    """
     if moi is None or pd.isna(moi):
         return "Balanced"
-    if moi < 5:
+    if moi < 4:
         return "Seller-Leaning"
     if moi <= 6:
         return "Balanced"
@@ -310,12 +1090,6 @@ def moi_zone(moi: float | None) -> str:
 
 
 def demand_signal(yoy_sales: float | None) -> str:
-    """
-    Sales YoY:
-    > +5  => Improving
-    [-5, +5] => Stable
-    < -5 => Weakening
-    """
     if yoy_sales is None or pd.isna(yoy_sales):
         return "Stable"
     if yoy_sales > 5:
@@ -326,12 +1100,6 @@ def demand_signal(yoy_sales: float | None) -> str:
 
 
 def price_signal(yoy_price: float | None) -> str:
-    """
-    Price YoY:
-    > +3 => Rising
-    [-3, +3] => Stable
-    < -3 => Softening
-    """
     if yoy_price is None or pd.isna(yoy_price):
         return "Stable"
     if yoy_price > 3:
@@ -342,12 +1110,6 @@ def price_signal(yoy_price: float | None) -> str:
 
 
 def supply_signal(yoy_listings: float | None) -> str:
-    """
-    Listings YoY:
-    > +5 => Expanding
-    [-5, +5] => Stable
-    < -5 => Tightening
-    """
     if yoy_listings is None or pd.isna(yoy_listings):
         return "Stable"
     if yoy_listings > 5:
@@ -358,9 +1120,6 @@ def supply_signal(yoy_listings: float | None) -> str:
 
 
 def moi_trend_3m(view: pd.DataFrame) -> str:
-    """
-    Compare latest 3M rolling mean vs previous 3M rolling mean for MOI.
-    """
     if "months_inventory" not in view.columns:
         return "Stable"
 
@@ -376,7 +1135,6 @@ def moi_trend_3m(view: pd.DataFrame) -> str:
     prev_roll = rolling.iloc[-2]
     delta = latest_roll - prev_roll
 
-    # small tolerance to avoid classifying tiny noise as trend
     if delta > 0.05:
         return "Rising"
     if delta < -0.05:
@@ -384,24 +1142,7 @@ def moi_trend_3m(view: pd.DataFrame) -> str:
     return "Stable"
 
 
-def overall_market(
-    current_zone: str,
-    demand: str,
-    price: str,
-    supply: str,
-    moi_trend: str,
-) -> str:
-    """
-    Overall logic:
-    1. Start from current MOI zone.
-    2. Use Demand / Price / Supply to nudge the result.
-    3. Use MOI Trend (3M) as confirmation.
-
-    Score map:
-    Seller-Leaning = -1
-    Balanced = 0
-    Buyer-Leaning = +1
-    """
+def overall_market(current_zone: str, demand: str, price: str, supply: str, moi_trend: str) -> str:
     zone_score = {
         "Seller-Leaning": -1,
         "Balanced": 0,
@@ -410,25 +1151,21 @@ def overall_market(
 
     score = zone_score.get(current_zone, 0)
 
-    # Demand: strong demand pushes seller side, weak demand pushes buyer side
     if demand == "Improving":
         score -= 1
     elif demand == "Weakening":
         score += 1
 
-    # Price: rising prices push seller side, softening prices push buyer side
     if price == "Rising":
         score -= 1
     elif price == "Softening":
         score += 1
 
-    # Supply: expanding supply pushes buyer side, tightening pushes seller side
     if supply == "Expanding":
         score += 1
     elif supply == "Tightening":
         score -= 1
 
-    # MOI rolling trend confirms short-term direction
     if moi_trend == "Rising":
         score += 1
     elif moi_trend == "Falling":
@@ -439,6 +1176,22 @@ def overall_market(
     if score >= 2:
         return "Buyer-Leaning"
     return "Balanced"
+
+
+def zone_state(zone_raw: str) -> str:
+    if zone_raw == "Buyer-Leaning":
+        return "soft"
+    if zone_raw == "Seller-Leaning":
+        return "hot"
+    return "balanced"
+
+
+def generic_state(val_raw: str) -> str:
+    if val_raw in {"Improving", "Rising", "Tightening"}:
+        return "hot"
+    if val_raw in {"Weakening", "Softening", "Expanding"}:
+        return "soft"
+    return "balanced"
 
 
 def build_signal_summary(
@@ -456,35 +1209,36 @@ def build_signal_summary(
     lang: str,
 ) -> str:
     moi_text = fmt_float(latest_moi, 2)
-    sales_yoy_text = fmt_pct(yoy_sales, 1)
-    price_yoy_text = fmt_pct(yoy_price, 1)
-    listings_yoy_text = fmt_pct(yoy_listings, 1)
+    sales_yoy_text = movement_text(yoy_sales, lang, 1)
+    price_yoy_text = movement_text(yoy_price, lang, 1)
+    listings_yoy_text = movement_text(yoy_listings, lang, 1)
+    price_phrase = price_direction_phrase(yoy_price, lang)
 
     if lang == "zh":
         return (
-            f"截至 {latest_month}，北卡房地产市场当前 MOI 为 {moi_text}，"
-            f"属于“{localized_label(current_zone, lang)}”。"
+            f"截至 {latest_month}，北卡房地产市场当前 MOI 为 {moi_text}，处于“{localized_label(current_zone, lang)}”区间。"
             f"从同比信号看，成交同比为 {sales_yoy_text}，需求表现为“{localized_label(demand, lang)}”；"
-            f"价格同比为 {price_yoy_text}，价格表现为“{localized_label(price, lang)}”；"
+            f"价格同比为 {price_yoy_text}，价格表现为“{localized_label(price, lang)}”，当前更接近“{price_phrase}”；"
             f"挂牌同比为 {listings_yoy_text}，供给表现为“{localized_label(supply, lang)}”。"
             f"短期库存趋势（3个月滚动）为“{localized_label(moi_trend, lang)}”。"
-            f"综合判断，目前市场整体为“{localized_label(overall, lang)}”。"
+            f"综合来看，当前市场整体更接近“{localized_label(overall, lang)}”。"
         )
 
     return (
         f"As of {latest_month}, North Carolina's MOI is {moi_text}, placing the market in a "
-        f"“{localized_label(current_zone, lang)}” zone. "
+        f"“{localized_label(current_zone, lang)}” position. "
         f"Sales YoY is {sales_yoy_text}, so demand is “{localized_label(demand, lang)}”. "
-        f"Price YoY is {price_yoy_text}, so pricing is “{localized_label(price, lang)}”. "
+        f"Price YoY is {price_yoy_text}, so pricing is “{localized_label(price, lang)}”, which reads as "
+        f"“{price_phrase}”. "
         f"Listings YoY is {listings_yoy_text}, so supply is “{localized_label(supply, lang)}”. "
         f"The short-term inventory trend based on the 3-month rolling MOI is “{localized_label(moi_trend, lang)}”. "
         f"Overall, the market is best described as “{localized_label(overall, lang)}”."
     )
 
 
-# -----------------------------
-# filtering helpers
-# -----------------------------
+# =========================================================
+# Filtering helpers
+# =========================================================
 def apply_time_range(df: pd.DataFrame, time_range: str) -> pd.DataFrame:
     if df.empty:
         return df.copy()
@@ -535,9 +1289,9 @@ def axis_config_for_span(num_points: int, lang: str) -> alt.Axis:
     )
 
 
-# -----------------------------
-# chart helpers
-# -----------------------------
+# =========================================================
+# Chart builders
+# =========================================================
 def build_interactive_line_chart(
     chart_df: pd.DataFrame,
     x_col: str,
@@ -547,8 +1301,9 @@ def build_interactive_line_chart(
     color_value: str | None = None,
     tooltip_fields: list | None = None,
     y_scale_domain: list[float] | None = None,
-    height: int = 360,
+    height: int = 420,
     add_last_label: bool = True,
+    y_format: str | None = None,
 ):
     num_points = len(chart_df)
     base = alt.Chart(chart_df)
@@ -564,6 +1319,7 @@ def build_interactive_line_chart(
         f"{y_col}:Q",
         title=y_title,
         scale=alt.Scale(domain=y_scale_domain) if y_scale_domain else alt.Undefined,
+        axis=alt.Axis(format=y_format) if y_format else alt.Axis(),
     )
 
     x_encoding = alt.X(
@@ -571,9 +1327,9 @@ def build_interactive_line_chart(
         axis=axis_config_for_span(num_points, lang),
     )
 
-    point_size = 30 if num_points > 36 else 42 if num_points > 24 else 50
+    point_size = 32 if num_points > 36 else 44 if num_points > 24 else 54
 
-    line = base.mark_line(strokeWidth=3).encode(
+    line = base.mark_line(strokeWidth=3.2).encode(
         x=x_encoding,
         y=y_encoding,
         color=alt.value(color_value) if color_value else alt.Undefined,
@@ -585,13 +1341,8 @@ def build_interactive_line_chart(
         color=alt.value(color_value) if color_value else alt.Undefined,
     )
 
-    selectors = base.mark_point(opacity=0).encode(
-        x=x_encoding
-    ).add_params(nearest)
-
-    rule = base.mark_rule(color="#9CA3AF").encode(
-        x=x_encoding
-    ).transform_filter(nearest)
+    selectors = base.mark_point(opacity=0).encode(x=x_encoding).add_params(nearest)
+    rule = base.mark_rule(color="#94a3b8").encode(x=x_encoding).transform_filter(nearest)
 
     default_tooltips = [
         alt.Tooltip("report_month:N", title=tr("report_month", lang)),
@@ -599,7 +1350,7 @@ def build_interactive_line_chart(
     ]
     tooltips = tooltip_fields if tooltip_fields else default_tooltips
 
-    hover_points = base.mark_point(size=95, filled=True).encode(
+    hover_points = base.mark_point(size=100, filled=True).encode(
         x=x_encoding,
         y=y_encoding,
         opacity=alt.condition(nearest, alt.value(1), alt.value(0)),
@@ -607,17 +1358,12 @@ def build_interactive_line_chart(
         color=alt.value(color_value) if color_value else alt.Undefined,
     )
 
-    chart = alt.layer(
-        line,
-        points,
-        selectors,
-        rule,
-        hover_points,
-    ).properties(height=height)
+    chart = alt.layer(line, points, selectors, rule, hover_points).properties(height=height)
 
     if add_last_label and not chart_df.empty:
         last_df = chart_df.tail(1)
-        last_point = alt.Chart(last_df).mark_point(size=95, filled=True).encode(
+        text_format = ".2f" if y_col == "months_inventory" else ",.0f"
+        last_point = alt.Chart(last_df).mark_point(size=100, filled=True).encode(
             x=x_encoding,
             y=y_encoding,
             color=alt.value(color_value) if color_value else alt.Undefined,
@@ -628,582 +1374,654 @@ def build_interactive_line_chart(
             dy=-8,
             fontSize=12,
             fontWeight="bold",
+            color="#0f172a",
         ).encode(
             x=x_encoding,
             y=y_encoding,
-            text=alt.Text(f"{y_col}:Q", format=".2f"),
+            text=alt.Text(f"{y_col}:Q", format=text_format),
         )
         chart = alt.layer(chart, last_point, last_label).properties(height=height)
 
     return chart
 
 
-def build_interactive_multi_line_chart(
-    chart_df: pd.DataFrame,
-    x_col: str,
-    y_col: str,
-    series_col: str,
-    lang: str,
-    y_title: str,
-    height: int = 360,
-):
-    num_points = chart_df["report_month"].nunique()
-    base = alt.Chart(chart_df)
+def build_indexed_supply_demand_chart(view: pd.DataFrame, lang: str) -> alt.Chart:
+    plot_df = view[["report_month_dt", "report_month", "listings", "sales"]].dropna(subset=["report_month_dt"]).copy()
+    plot_df = plot_df.dropna(subset=["listings", "sales"])
+    if plot_df.empty:
+        return alt.Chart(pd.DataFrame({"x": [], "y": []})).mark_line()
 
-    nearest = alt.selection_point(
-        nearest=True,
-        on="mouseover",
-        fields=[x_col],
-        empty="none",
+    base_listings = plot_df["listings"].replace(0, pd.NA).dropna()
+    base_sales = plot_df["sales"].replace(0, pd.NA).dropna()
+    if base_listings.empty or base_sales.empty:
+        return alt.Chart(pd.DataFrame({"x": [], "y": []})).mark_line()
+
+    listings_base = float(base_listings.iloc[0])
+    sales_base = float(base_sales.iloc[0])
+
+    plot_df["listings_index"] = plot_df["listings"] / listings_base * 100
+    plot_df["sales_index"] = plot_df["sales"] / sales_base * 100
+
+    long_df = plot_df.melt(
+        id_vars=["report_month_dt", "report_month", "listings", "sales"],
+        value_vars=["listings_index", "sales_index"],
+        var_name="series_raw",
+        value_name="index_value",
     )
 
-    x_encoding = alt.X(
-        f"{x_col}:T",
-        axis=axis_config_for_span(num_points, lang),
+    label_map = {
+        "listings_index": tr("listings", lang),
+        "sales_index": tr("sales", lang),
+    }
+    color_domain = [tr("listings", lang), tr("sales", lang)]
+    color_range = ["#7cc0f7", "#1565c0"]
+
+    long_df["series"] = long_df["series_raw"].map(label_map)
+    long_df["raw_value"] = long_df.apply(
+        lambda r: r["listings"] if r["series_raw"] == "listings_index" else r["sales"],
+        axis=1,
     )
+
+    num_points = long_df["report_month"].nunique()
+    x_encoding = alt.X("report_month_dt:T", axis=axis_config_for_span(num_points, lang))
+
+    y_domain = nice_axis_domain(long_df["index_value"], zero_floor=False, pad_ratio=0.10, min_span=12)
+    if y_domain is None:
+        y_domain = [80, 120]
 
     y_encoding = alt.Y(
-        f"{y_col}:Q",
-        title=y_title,
+        "index_value:Q",
+        title=tr("indexed_axis", lang),
+        axis=alt.Axis(format=".0f"),
+        scale=alt.Scale(domain=y_domain),
     )
 
     color_encoding = alt.Color(
-        f"{series_col}:N",
-        title="",
-        legend=alt.Legend(orient="right"),
+        "series:N",
+        scale=alt.Scale(domain=color_domain, range=color_range),
+        legend=alt.Legend(title=""),
     )
 
-    point_size = 28 if num_points > 36 else 38 if num_points > 24 else 45
+    base = alt.Chart(long_df)
+    nearest = alt.selection_point(nearest=True, on="mouseover", fields=["report_month_dt"], empty="none")
 
-    line = base.mark_line(strokeWidth=2.8).encode(
+    ref_line = alt.Chart(pd.DataFrame({"y": [100]})).mark_rule(
+        color="#cbd5e1",
+        strokeDash=[6, 6],
+    ).encode(y="y:Q")
+
+    line = base.mark_line(strokeWidth=3).encode(
         x=x_encoding,
         y=y_encoding,
         color=color_encoding,
     )
 
-    points = base.mark_point(filled=True, size=point_size).encode(
+    points = base.mark_point(filled=True, size=42).encode(
         x=x_encoding,
         y=y_encoding,
         color=color_encoding,
     )
 
-    selectors = alt.Chart(chart_df[[x_col]].drop_duplicates()).mark_point(opacity=0).encode(
+    selectors = alt.Chart(long_df[["report_month_dt"]].drop_duplicates()).mark_point(opacity=0).encode(
         x=x_encoding
     ).add_params(nearest)
 
-    rule = alt.Chart(chart_df[[x_col]].drop_duplicates()).mark_rule(color="#9CA3AF").encode(
+    rule = alt.Chart(long_df[["report_month_dt"]].drop_duplicates()).mark_rule(color="#94a3b8").encode(
         x=x_encoding
     ).transform_filter(nearest)
 
-    hover_points = base.mark_point(size=100, filled=True).encode(
+    hover = base.mark_point(size=110, filled=True).encode(
         x=x_encoding,
         y=y_encoding,
         color=color_encoding,
         opacity=alt.condition(nearest, alt.value(1), alt.value(0)),
         tooltip=[
             alt.Tooltip("report_month:N", title=tr("report_month", lang)),
-            alt.Tooltip(f"{series_col}:N", title=tr("series", lang)),
-            alt.Tooltip(f"{y_col}:Q", title=tr("value", lang), format=",.2f"),
+            alt.Tooltip("series:N", title=tr("series", lang)),
+            alt.Tooltip("index_value:Q", title=tr("indexed_note", lang), format=".1f"),
+            alt.Tooltip("raw_value:Q", title=tr("value", lang), format=",.0f"),
         ],
     )
 
-    chart = alt.layer(
-        line,
-        points,
-        selectors,
-        rule,
-        hover_points,
-    ).properties(height=height)
-
-    last_points = (
-        chart_df.sort_values([series_col, x_col])
-        .groupby(series_col, as_index=False)
-        .tail(1)
-        .copy()
+    last_points = long_df.sort_values(["series", "report_month_dt"]).groupby("series", as_index=False).tail(1)
+    last_marks = alt.Chart(last_points).mark_point(size=100, filled=True).encode(
+        x=x_encoding,
+        y=y_encoding,
+        color=color_encoding,
+    )
+    last_labels = alt.Chart(last_points).mark_text(
+        align="left",
+        dx=8,
+        dy=0,
+        fontSize=11,
+        fontWeight="bold",
+    ).encode(
+        x=x_encoding,
+        y=y_encoding,
+        color=color_encoding,
+        text=alt.Text("index_value:Q", format=".0f"),
     )
 
-    if not last_points.empty:
-        last_point_marks = alt.Chart(last_points).mark_point(size=100, filled=True).encode(
-            x=x_encoding,
-            y=y_encoding,
-            color=color_encoding,
-        )
-        last_labels = alt.Chart(last_points).mark_text(
-            align="left",
-            dx=8,
-            dy=0,
-            fontSize=11,
-            fontWeight="bold",
-        ).encode(
-            x=x_encoding,
-            y=y_encoding,
-            color=color_encoding,
-            text=alt.Text(f"{y_col}:Q", format=",.0f"),
-        )
-        chart = alt.layer(chart, last_point_marks, last_labels).properties(height=height)
-
-    return chart
+    return alt.layer(ref_line, line, points, selectors, rule, hover, last_marks, last_labels).properties(height=420)
 
 
-# -----------------------------
-# render chart sections
-# -----------------------------
+# =========================================================
+# Render sections
+# =========================================================
 def render_inventory_chart(view: pd.DataFrame, lang: str) -> None:
-    st.subheader(tr("inventory_chart_title", lang))
-    st.caption(tr("inventory_chart_caption", lang))
+    render_chart_header(tr("inventory_chart_title", lang), tr("inventory_chart_caption", lang))
 
     inv_chart_df = view[["report_month_dt", "report_month", "months_inventory"]].dropna().copy()
-    if inv_chart_df.empty:
-        return
+    if not inv_chart_df.empty:
+        inv_chart_df["market_zone"] = inv_chart_df["months_inventory"].apply(moi_zone)
+        inv_chart_df["market_zone_display"] = inv_chart_df["market_zone"].map(lambda x: localized_label(x, lang))
 
-    inv_chart_df["market_zone"] = inv_chart_df["months_inventory"].apply(moi_zone)
-    inv_chart_df["market_zone_display"] = inv_chart_df["market_zone"].map(lambda x: localized_label(x, lang))
+        y_domain = nice_axis_domain(
+            inv_chart_df["months_inventory"],
+            zero_floor=True,
+            pad_ratio=0.16,
+            min_span=2.0,
+            min_upper=7.0,
+        )
+        if y_domain is None:
+            y_domain = [0, 7]
 
-    y_max = max(7.0, float(inv_chart_df["months_inventory"].max()) + 0.6)
+        balanced_band = alt.Chart(pd.DataFrame({"ymin": [4.0], "ymax": [6.0]})).mark_rect(
+            opacity=0.12, color="#f59e0b"
+        ).encode(
+            y=alt.Y(
+                "ymin:Q",
+                scale=alt.Scale(domain=y_domain),
+                title=tr("inventory_pressure_axis", lang),
+            ),
+            y2="ymax:Q",
+        )
 
-    balanced_band = alt.Chart(
-        pd.DataFrame({"ymin": [5.0], "ymax": [6.0]})
-    ).mark_rect(opacity=0.12).encode(
-        y=alt.Y(
-            "ymin:Q",
-            scale=alt.Scale(domain=[0, y_max]),
-            title="MOI (Months of Inventory)" if lang == "en" else "MOI（库存月数）",
-        ),
-        y2="ymax:Q",
-    )
+        line_4 = alt.Chart(pd.DataFrame({"y": [4.0]})).mark_rule(
+            strokeDash=[6, 4], size=1.5, color="#94a3b8"
+        ).encode(y=alt.Y("y:Q", scale=alt.Scale(domain=y_domain)))
 
-    line_5 = alt.Chart(pd.DataFrame({"y": [5.0]})).mark_rule(
-        strokeDash=[6, 4],
-        size=1.5,
-        color="#111827",
-    ).encode(
-        y=alt.Y("y:Q", scale=alt.Scale(domain=[0, y_max]))
-    )
+        line_6 = alt.Chart(pd.DataFrame({"y": [6.0]})).mark_rule(
+            strokeDash=[6, 4], size=1.5, color="#cbd5e1"
+        ).encode(y=alt.Y("y:Q", scale=alt.Scale(domain=y_domain)))
 
-    line_6 = alt.Chart(pd.DataFrame({"y": [6.0]})).mark_rule(
-        strokeDash=[6, 4],
-        size=1.5,
-        color="#111827",
-    ).encode(
-        y=alt.Y("y:Q", scale=alt.Scale(domain=[0, y_max]))
-    )
-
-    main_chart = build_interactive_line_chart(
-        chart_df=inv_chart_df,
-        x_col="report_month_dt",
-        y_col="months_inventory",
-        lang=lang,
-        y_title="MOI (Months of Inventory)" if lang == "en" else "MOI（库存月数）",
-        color_value="#1565C0",
-        tooltip_fields=[
-            alt.Tooltip("report_month:N", title=tr("report_month", lang)),
-            alt.Tooltip("months_inventory:Q", title="MOI", format=".2f"),
-            alt.Tooltip("market_zone_display:N", title=tr("market_zone", lang)),
-        ],
-        y_scale_domain=[0, y_max],
-        height=390,
-        add_last_label=True,
-    )
-
-    inventory_chart = alt.layer(
-        balanced_band,
-        line_5,
-        line_6,
-        main_chart,
-    ).resolve_scale(y="shared").properties(height=390)
-
-    st.altair_chart(inventory_chart, width="stretch")
-
-    st.markdown(f"**{tr('market_zone_table_title', lang)}**")
-    zone_df = pd.DataFrame(
-        {
-            tr("moi_range", lang): ["< 5.0", "5.0 – 6.0", "> 6.0"],
-            tr("market_interpretation", lang): [
-                tr("seller_zone", lang),
-                tr("balanced_zone", lang),
-                tr("buyer_zone", lang),
+        main_chart = build_interactive_line_chart(
+            chart_df=inv_chart_df,
+            x_col="report_month_dt",
+            y_col="months_inventory",
+            lang=lang,
+            y_title=tr("inventory_pressure_axis", lang),
+            color_value="#2563eb",
+            tooltip_fields=[
+                alt.Tooltip("report_month:N", title=tr("report_month", lang)),
+                alt.Tooltip("months_inventory:Q", title="MOI", format=".2f"),
+                alt.Tooltip("market_zone_display:N", title=tr("market_zone", lang)),
             ],
-        }
-    )
-    st.dataframe(zone_df, width="content", hide_index=True)
+            y_scale_domain=y_domain,
+            height=420,
+            add_last_label=True,
+            y_format=".1f",
+        )
+
+        st.altair_chart(
+            alt.layer(balanced_band, line_4, line_6, main_chart).resolve_scale(y="shared").properties(height=420),
+            width="stretch",
+        )
+
+        zone_df = pd.DataFrame(
+            {
+                tr("moi_range", lang): ["< 4.0", "4.0 – 6.0", "> 6.0"],
+                tr("market_interpretation", lang): [
+                    tr("seller_zone", lang),
+                    tr("balanced_zone", lang),
+                    tr("buyer_zone", lang),
+                ],
+            }
+        )
+        st.dataframe(zone_df, width="content", hide_index=True)
 
 
-def render_listings_sales_chart(view: pd.DataFrame, lang: str) -> None:
-    st.subheader(tr("ls_title", lang))
-    st.caption(tr("ls_caption", lang))
+def render_supply_demand_chart(view: pd.DataFrame, lang: str) -> None:
+    render_chart_header(tr("ls_title", lang), tr("ls_caption", lang))
 
-    chart_df = view[["report_month_dt", "report_month", "listings", "sales"]].dropna(subset=["report_month_dt"]).copy()
-    if chart_df.empty:
-        return
-
-    chart_df = chart_df.melt(
-        id_vars=["report_month_dt", "report_month"],
-        value_vars=["listings", "sales"],
-        var_name="series_raw",
-        value_name="value",
-    )
-
-    series_map = {
-        "listings": tr("listings", lang),
-        "sales": tr("sales", lang),
-    }
-    chart_df["series_display"] = chart_df["series_raw"].map(series_map)
-
-    chart = build_interactive_multi_line_chart(
-        chart_df=chart_df,
-        x_col="report_month_dt",
-        y_col="value",
-        series_col="series_display",
-        lang=lang,
-        y_title=tr("value", lang),
-        height=360,
-    )
-
+    chart = build_indexed_supply_demand_chart(view, lang)
     st.altair_chart(chart, width="stretch")
 
+    latest_listings = latest_value(view, "listings")
+    latest_sales = latest_value(view, "sales")
+    latest_yoy_listings = latest_value(view, "yoy_listings_pct")
+    latest_yoy_sales = latest_value(view, "yoy_sales_pct")
 
-def render_price_chart(view: pd.DataFrame, lang: str) -> None:
-    st.subheader(tr("price_title", lang))
-    st.caption(tr("price_caption", lang))
+    render_metric_strip(
+        [
+            (tr("listings", lang), fmt_int(latest_listings)),
+            (tr("sales", lang), fmt_int(latest_sales)),
+            (tr("listings_yoy", lang), movement_text(latest_yoy_listings, lang, 1)),
+            (tr("sales_yoy", lang), movement_text(latest_yoy_sales, lang, 1)),
+        ]
+    )
+
+
+def render_price_focus_chart(view: pd.DataFrame, lang: str, price_signal_display: str, price_signal_raw: str, latest_yoy_price) -> None:
+    render_chart_header(tr("price_title", lang), tr("price_caption", lang))
+
+    price_phrase = price_direction_phrase(latest_yoy_price, lang)
+
+    render_html(
+        f"""
+        <div class="spotlight-card">
+            <div class="card-kicker">{escape(sanitize_text(tr("price_spotlight", lang)))}</div>
+            <div class="card-main">{escape(sanitize_text(price_signal_display))} · {escape(sanitize_text(price_phrase))}</div>
+            {signal_chip_html(f'{tr("price_yoy", lang)} {movement_text(latest_yoy_price, lang, 1)}', generic_state(price_signal_raw))}
+            <div class="card-body">{escape(sanitize_text(tr("price_spotlight_sub", lang)))}</div>
+        </div>
+        """
+    )
 
     price_df = view[["report_month_dt", "report_month", "median_price"]].dropna().copy()
-    if price_df.empty:
-        return
-
-    chart = build_interactive_line_chart(
-        chart_df=price_df,
-        x_col="report_month_dt",
-        y_col="median_price",
-        lang=lang,
-        y_title=tr("median_price", lang),
-        color_value="#1E88E5",
-        tooltip_fields=[
-            alt.Tooltip("report_month:N", title=tr("report_month", lang)),
-            alt.Tooltip("median_price:Q", title=tr("median_price", lang), format=",.0f"),
-        ],
-        height=360,
-        add_last_label=True,
-    )
-
-    st.altair_chart(chart, width="stretch")
-
-
-# -----------------------------
-# language switch
-# -----------------------------
-if "lang" not in st.session_state:
-    st.session_state.lang = "en"
-
-lang_col1, lang_col2, _ = st.columns([1, 1, 8])
-
-with lang_col1:
-    if st.button("English", width="stretch"):
-        st.session_state.lang = "en"
-
-with lang_col2:
-    if st.button("中文", width="stretch"):
-        st.session_state.lang = "zh"
-
-lang = st.session_state.lang
-
-
-# -----------------------------
-# load data
-# -----------------------------
-df = load_monthly_metrics(DATA_PATH)
-if df.empty:
-    st.error(tr("missing_file", lang))
-    st.stop()
-
-required = {
-    "report_month",
-    "report_month_dt",
-    "report_year",
-    "listings",
-    "sales",
-    "median_price",
-    "months_inventory",
-    "yoy_listings_pct",
-    "yoy_sales_pct",
-    "yoy_price_pct",
-}
-missing = [c for c in required if c not in df.columns]
-if missing:
-    st.error(f"{tr('missing_cols', lang)} {missing}")
-    st.stop()
-
-
-# -----------------------------
-# page header
-# -----------------------------
-st.title(tr("page_title", lang))
-st.caption(tr("page_caption", lang))
-
-
-# -----------------------------
-# sidebar filters
-# -----------------------------
-st.sidebar.header(tr("filters", lang))
-
-time_range_map = {
-    tr("last_12m", lang): "12M",
-    tr("last_24m", lang): "24M",
-    tr("last_36m", lang): "36M",
-    tr("ytd", lang): "YTD",
-    tr("all_data", lang): "ALL",
-}
-
-selected_time_range_label = st.sidebar.radio(
-    tr("time_range", lang),
-    options=list(time_range_map.keys()),
-    index=1 if tr("last_24m", lang) in time_range_map else 0,
-)
-
-selected_time_range = time_range_map[selected_time_range_label]
-
-years = sorted([int(y) for y in df["report_year"].dropna().unique().tolist()])
-year_options = [tr("all_years", lang)] + [str(y) for y in years]
-
-selected_year = st.sidebar.selectbox(
-    tr("year_filter", lang),
-    options=year_options,
-    index=0,
-)
-
-filtered = df.copy()
-
-if selected_year != tr("all_years", lang):
-    filtered = filtered[filtered["report_year"] == int(selected_year)].copy()
-
-filtered = apply_time_range(filtered, selected_time_range)
-
-if filtered.empty:
-    st.warning(tr("no_data_range", lang))
-    st.stop()
-
-month_options = filtered["report_month"].dropna().astype(str).tolist()
-min_m = min(month_options)
-max_m = max(month_options)
-
-month_window = st.sidebar.select_slider(
-    tr("month_window", lang),
-    options=month_options,
-    value=(min_m, max_m),
-)
-
-start_month, end_month = month_window
-mask = (filtered["report_month"] >= start_month) & (filtered["report_month"] <= end_month)
-view = filtered.loc[mask].copy()
-
-if view.empty:
-    st.warning(tr("no_data_range", lang))
-    st.stop()
-
-view = view.sort_values("report_month_dt").copy()
-
-
-# -----------------------------
-# headline / KPI section
-# -----------------------------
-st.markdown(f"## {tr('headline_title', lang)}")
-st.caption(tr("headline_caption", lang))
-
-meta_col1, meta_col2 = st.columns([4, 1])
-with meta_col2:
-    st.metric(tr("selected_data_points", lang), len(view))
-
-k1, k2, k3, k4 = st.columns(4)
-
-latest_month = str(view["report_month"].iloc[-1])
-inventory_val = latest_value(view, "months_inventory")
-listings_val = latest_value(view, "listings")
-sales_val = latest_value(view, "sales")
-
-k1.metric(tr("latest_month", lang), value=latest_month)
-k2.metric(tr("inventory_months", lang), value=fmt_float(inventory_val, 2))
-k3.metric(tr("listings", lang), value=fmt_int(listings_val))
-k4.metric(tr("sales", lang), value=fmt_int(sales_val))
-
-st.divider()
-
-
-# -----------------------------
-# charts
-# -----------------------------
-render_inventory_chart(view, lang)
-
-st.divider()
-
-render_listings_sales_chart(view, lang)
-
-st.divider()
-
-render_price_chart(view, lang)
-
-st.divider()
-
-
-# -----------------------------
-# new NC Market Signal framework
-# -----------------------------
-latest_yoy_sales = latest_value(view, "yoy_sales_pct")
-latest_yoy_price = latest_value(view, "yoy_price_pct")
-latest_yoy_listings = latest_value(view, "yoy_listings_pct")
-
-current_moi_zone_raw = moi_zone(inventory_val)
-demand_signal_raw = demand_signal(latest_yoy_sales)
-price_signal_raw = price_signal(latest_yoy_price)
-supply_signal_raw = supply_signal(latest_yoy_listings)
-moi_trend_raw = moi_trend_3m(view)
-
-overall_raw = overall_market(
-    current_zone=current_moi_zone_raw,
-    demand=demand_signal_raw,
-    price=price_signal_raw,
-    supply=supply_signal_raw,
-    moi_trend=moi_trend_raw,
-)
-
-current_moi_zone_display = localized_label(current_moi_zone_raw, lang)
-demand_signal_display = localized_label(demand_signal_raw, lang)
-price_signal_display = localized_label(price_signal_raw, lang)
-supply_signal_display = localized_label(supply_signal_raw, lang)
-moi_trend_display = localized_label(moi_trend_raw, lang)
-overall_display = localized_label(overall_raw, lang)
-
-
-# -----------------------------
-# signal layout
-# -----------------------------
-st.markdown(f"## {tr('market_signal', lang)}")
-
-card1, card2, card3, card4, card5 = st.columns(5)
-
-with card1:
-    st.metric(
-        tr("current_moi_zone", lang),
-        current_moi_zone_display,
-        delta=f"MOI {fmt_float(inventory_val, 2)}",
-    )
-
-with card2:
-    st.metric(
-        tr("demand_signal", lang),
-        demand_signal_display,
-        delta=f"{tr('sales_yoy', lang)} {fmt_pct(latest_yoy_sales, 1)}",
-    )
-
-with card3:
-    st.metric(
-        tr("price_signal", lang),
-        price_signal_display,
-        delta=f"{tr('price_yoy', lang)} {fmt_pct(latest_yoy_price, 1)}",
-    )
-
-with card4:
-    st.metric(
-        tr("supply_signal", lang),
-        supply_signal_display,
-        delta=f"{tr('listings_yoy', lang)} {fmt_pct(latest_yoy_listings, 1)}",
-    )
-
-with card5:
-    st.metric(
-        tr("moi_trend_3m", lang),
-        moi_trend_display,
-        delta=f"MOI {fmt_float(inventory_val, 2)}",
-    )
-
-st.markdown("")
-
-left_col, right_col = st.columns([2, 3])
-
-with left_col:
-    st.markdown(f"### {tr('overall_market', lang)}")
-    st.success(f"**{overall_display}**")
-
-    detail_df = pd.DataFrame(
-        {
-            "Metric": [
-                tr("current_moi_zone", lang),
-                tr("demand_signal", lang),
-                tr("price_signal", lang),
-                tr("supply_signal", lang),
-                tr("moi_trend_3m", lang),
-            ],
-            "Value": [
-                current_moi_zone_display,
-                f"{demand_signal_display} ({fmt_pct(latest_yoy_sales, 1)})",
-                f"{price_signal_display} ({fmt_pct(latest_yoy_price, 1)})",
-                f"{supply_signal_display} ({fmt_pct(latest_yoy_listings, 1)})",
-                moi_trend_display,
-            ],
-        }
-    )
-    st.dataframe(detail_df, width="stretch", hide_index=True)
-
-with right_col:
-    st.markdown(f"### {tr('signal_summary', lang)}")
-    st.info(
-        build_signal_summary(
-            latest_month=latest_month,
-            latest_moi=inventory_val,
-            current_zone=current_moi_zone_raw,
-            yoy_sales=latest_yoy_sales,
-            demand=demand_signal_raw,
-            yoy_price=latest_yoy_price,
-            price=price_signal_raw,
-            yoy_listings=latest_yoy_listings,
-            supply=supply_signal_raw,
-            moi_trend=moi_trend_raw,
-            overall=overall_raw,
+    if not price_df.empty:
+        y_domain = nice_axis_domain(price_df["median_price"], zero_floor=False, pad_ratio=0.10, min_span=20000)
+        chart = build_interactive_line_chart(
+            chart_df=price_df,
+            x_col="report_month_dt",
+            y_col="median_price",
             lang=lang,
+            y_title=tr("price_axis", lang),
+            color_value="#0ea5e9",
+            tooltip_fields=[
+                alt.Tooltip("report_month:N", title=tr("report_month", lang)),
+                alt.Tooltip("median_price:Q", title=tr("median_price", lang), format=",.0f"),
+            ],
+            y_scale_domain=y_domain,
+            height=460,
+            add_last_label=True,
+            y_format=",.0f",
         )
+        st.altair_chart(chart, width="stretch")
+
+
+def render_signal_table(rows: list[dict], lang: str) -> None:
+    parts = [
+        '<div class="table-card">',
+        f'<div class="card-kicker">{escape(sanitize_text(tr("signal_table_title", lang)))}</div>',
+        f'<table class="signal-table">',
+        "<thead><tr>",
+        f'<th>{escape(sanitize_text(tr("table_metric", lang)))}</th>',
+        f'<th>{escape(sanitize_text(tr("table_value", lang)))}</th>',
+        f'<th>{escape(sanitize_text(tr("table_signal", lang)))}</th>',
+        f'<th>{escape(sanitize_text(tr("table_basis", lang)))}</th>',
+        "</tr></thead><tbody>",
+    ]
+
+    for row in rows:
+        parts.append(
+            "<tr>"
+            f'<td class="table-metric">{escape(sanitize_text(row["metric"]))}</td>'
+            f'<td>{escape(sanitize_text(row["value"]))}</td>'
+            f'<td>{signal_chip_html(row["signal"], row["state"])}</td>'
+            f'<td>{escape(sanitize_text(row["basis"]))}</td>'
+            "</tr>"
+        )
+
+    parts.append("</tbody></table></div>")
+    render_html("".join(parts))
+
+
+# =========================================================
+# App
+# =========================================================
+def main() -> None:
+    inject_css()
+
+    lang = st.sidebar.radio("Language / 语言", options=["中文", "English"], index=0, horizontal=True)
+    locale = "zh" if lang == "中文" else "en"
+
+    df = load_monthly_metrics(DATA_PATH)
+    if df.empty:
+        st.error(tr("missing_file", locale))
+        st.stop()
+
+    required = {
+        "report_month",
+        "report_month_dt",
+        "report_year",
+        "listings",
+        "sales",
+        "median_price",
+        "months_inventory",
+        "yoy_listings_pct",
+        "yoy_sales_pct",
+        "yoy_price_pct",
+    }
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        st.error(f"{tr('missing_cols', locale)} {missing}")
+        st.stop()
+
+    render_hero(locale)
+
+    st.sidebar.header(tr("filters", locale))
+
+    time_range_map = {
+        tr("last_12m", locale): "12M",
+        tr("last_24m", locale): "24M",
+        tr("last_36m", locale): "36M",
+        tr("ytd", locale): "YTD",
+        tr("all_data", locale): "ALL",
+    }
+
+    selected_time_range_label = st.sidebar.radio(
+        tr("time_range", locale),
+        options=list(time_range_map.keys()),
+        index=1 if tr("last_24m", locale) in time_range_map else 0,
+    )
+    selected_time_range = time_range_map[selected_time_range_label]
+
+    years = sorted([int(y) for y in df["report_year"].dropna().unique().tolist()])
+    year_options = [tr("all_years", locale)] + [str(y) for y in years]
+
+    selected_year = st.sidebar.selectbox(
+        tr("year_filter", locale),
+        options=year_options,
+        index=0,
     )
 
-st.divider()
+    filtered = df.copy()
 
+    if selected_year != tr("all_years", locale):
+        filtered = filtered[filtered["report_year"] == int(selected_year)].copy()
 
-# -----------------------------
-# explainers
-# -----------------------------
-with st.expander(tr("how_to_read", lang)):
-    st.write(tr("how_to_read_text", lang))
+    filtered = apply_time_range(filtered, selected_time_range)
 
-with st.expander(tr("source_note", lang)):
-    st.write(tr("source_note_text", lang))
+    if filtered.empty:
+        st.warning(tr("no_data_range", locale))
+        st.stop()
 
-with st.expander(tr("show_latest_rows", lang)):
-    latest_rows = view[
-        [
-            "report_month",
-            "months_inventory",
-            "listings",
-            "sales",
-            "median_price",
-            "yoy_listings_pct",
-            "yoy_sales_pct",
-            "yoy_price_pct",
-            "mom_inventory_pct",
-            "mom_sales_pct",
-            "mom_price_pct",
+    month_options = filtered["report_month"].dropna().astype(str).tolist()
+    min_m = min(month_options)
+    max_m = max(month_options)
+
+    month_window = st.sidebar.select_slider(
+        tr("month_window", locale),
+        options=month_options,
+        value=(min_m, max_m),
+    )
+
+    start_month, end_month = month_window
+    mask = (filtered["report_month"] >= start_month) & (filtered["report_month"] <= end_month)
+    view = filtered.loc[mask].copy()
+
+    if view.empty:
+        st.warning(tr("no_data_range", locale))
+        st.stop()
+
+    view = view.sort_values("report_month_dt").copy()
+
+    latest_month = str(view["report_month"].iloc[-1])
+    first_month = str(view["report_month"].iloc[0])
+    inventory_val = latest_value(view, "months_inventory")
+    latest_yoy_sales = latest_value(view, "yoy_sales_pct")
+    latest_yoy_price = latest_value(view, "yoy_price_pct")
+    latest_yoy_listings = latest_value(view, "yoy_listings_pct")
+
+    current_moi_zone_raw = moi_zone(inventory_val)
+    demand_signal_raw = demand_signal(latest_yoy_sales)
+    price_signal_raw = price_signal(latest_yoy_price)
+    supply_signal_raw = supply_signal(latest_yoy_listings)
+    moi_trend_raw = moi_trend_3m(view)
+
+    overall_raw = overall_market(
+        current_zone=current_moi_zone_raw,
+        demand=demand_signal_raw,
+        price=price_signal_raw,
+        supply=supply_signal_raw,
+        moi_trend=moi_trend_raw,
+    )
+
+    current_moi_zone_display = localized_label(current_moi_zone_raw, locale)
+    demand_signal_display = localized_label(demand_signal_raw, locale)
+    price_signal_display = localized_label(price_signal_raw, locale)
+    supply_signal_display = localized_label(supply_signal_raw, locale)
+    moi_trend_display = localized_label(moi_trend_raw, locale)
+    overall_display = localized_label(overall_raw, locale)
+
+    overall_state = zone_state(overall_raw)
+    price_state = generic_state(price_signal_raw)
+    price_phrase = price_direction_phrase(latest_yoy_price, locale)
+
+    s1, s2, s3, s4, s5 = st.columns(5)
+    with s1:
+        render_summary_card(
+            tr("metric_latest_month", locale),
+            latest_month,
+            f"{tr('selected_data_points', locale)}: {len(view)}",
+        )
+    with s2:
+        render_summary_card(
+            tr("inventory_months", locale),
+            fmt_float(inventory_val, 2),
+            tr("headline_caption", locale),
+            state=zone_state(current_moi_zone_raw),
+            badge_label=current_moi_zone_display,
+        )
+    with s3:
+        render_summary_card(
+            tr("metric_data_span", locale),
+            f"{first_month} → {latest_month}",
+            tr("time_range", locale),
+        )
+    with s4:
+        render_summary_card(
+            tr("metric_market_bias", locale),
+            overall_display,
+            tr("signal_summary", locale),
+            state=overall_state,
+            badge_label=overall_display,
+        )
+    with s5:
+        render_summary_card(
+            tr("metric_price_signal", locale),
+            f"{price_signal_display} · {price_phrase}",
+            f'{tr("price_yoy", locale)}: {movement_text(latest_yoy_price, locale, 1)}',
+            state=price_state,
+            badge_label=price_signal_display,
+        )
+
+    render_section_head(tr("section_charts", locale), tr("section_charts_sub", locale))
+    render_inventory_chart(view, locale)
+    render_supply_demand_chart(view, locale)
+    render_price_focus_chart(view, locale, price_signal_display, price_signal_raw, latest_yoy_price)
+
+    render_section_head(tr("section_signal", locale), tr("section_signal_sub", locale))
+
+    sig1, sig2, sig3, sig4, sig5 = st.columns(5)
+    with sig1:
+        render_signal_card(
+            tr("current_moi_zone", locale),
+            current_moi_zone_display,
+            f"MOI {fmt_float(inventory_val, 2)}",
+            zone_state(current_moi_zone_raw),
+            tr("signal_card_1_sub", locale),
+        )
+
+    with sig2:
+        render_signal_card(
+            tr("demand_signal", locale),
+            demand_signal_display,
+            f'{tr("sales_yoy", locale)} {movement_text(latest_yoy_sales, locale, 1)}',
+            generic_state(demand_signal_raw),
+            tr("signal_card_2_sub", locale),
+        )
+
+    with sig3:
+        render_signal_card(
+            tr("price_signal", locale),
+            price_signal_display,
+            f'{tr("price_yoy", locale)} {movement_text(latest_yoy_price, locale, 1)} · {price_phrase}',
+            generic_state(price_signal_raw),
+            tr("signal_card_3_sub", locale),
+        )
+
+    with sig4:
+        render_signal_card(
+            tr("supply_signal", locale),
+            supply_signal_display,
+            f'{tr("listings_yoy", locale)} {movement_text(latest_yoy_listings, locale, 1)}',
+            generic_state(supply_signal_raw),
+            tr("signal_card_4_sub", locale),
+        )
+
+    with sig5:
+        render_signal_card(
+            tr("overall_market", locale),
+            overall_display,
+            moi_trend_display,
+            zone_state(overall_raw),
+            tr("signal_card_5_sub", locale),
+        )
+
+    left_col, right_col = st.columns([1.06, 1.44], gap="large")
+
+    with left_col:
+        signal_rows = [
+            {
+                "metric": tr("current_moi_zone", locale),
+                "value": f"MOI {fmt_float(inventory_val, 2)}",
+                "signal": current_moi_zone_display,
+                "state": zone_state(current_moi_zone_raw),
+                "basis": tr("signal_card_1_sub", locale),
+            },
+            {
+                "metric": tr("demand_signal", locale),
+                "value": movement_text(latest_yoy_sales, locale, 1),
+                "signal": demand_signal_display,
+                "state": generic_state(demand_signal_raw),
+                "basis": tr("signal_card_2_sub", locale),
+            },
+            {
+                "metric": tr("price_signal", locale),
+                "value": f"{movement_text(latest_yoy_price, locale, 1)} · {price_phrase}",
+                "signal": price_signal_display,
+                "state": generic_state(price_signal_raw),
+                "basis": tr("signal_card_3_sub", locale),
+            },
+            {
+                "metric": tr("supply_signal", locale),
+                "value": movement_text(latest_yoy_listings, locale, 1),
+                "signal": supply_signal_display,
+                "state": generic_state(supply_signal_raw),
+                "basis": tr("signal_card_4_sub", locale),
+            },
+            {
+                "metric": tr("moi_trend_3m", locale),
+                "value": moi_trend_display,
+                "signal": moi_trend_display,
+                "state": generic_state(moi_trend_raw),
+                "basis": tr("metric_moi_trend", locale),
+            },
+            {
+                "metric": tr("overall_market", locale),
+                "value": overall_display,
+                "signal": overall_display,
+                "state": zone_state(overall_raw),
+                "basis": tr("signal_card_5_sub", locale),
+            },
         ]
-    ].tail(24).copy()
 
-    latest_rows = latest_rows.rename(
-        columns={
-            "report_month": tr("report_month", lang),
-            "months_inventory": tr("months_inventory", lang),
-            "listings": tr("listings", lang),
-            "sales": tr("sales", lang),
-            "median_price": tr("median_price", lang),
-            "yoy_listings_pct": tr("yoy_listings_pct", lang),
-            "yoy_sales_pct": tr("yoy_sales_pct", lang),
-            "yoy_price_pct": tr("yoy_price_pct", lang),
-            "mom_inventory_pct": tr("mom_inventory_pct", lang),
-            "mom_sales_pct": tr("mom_sales_pct", lang),
-            "mom_price_pct": tr("mom_price_pct", lang),
-        }
-    )
+        render_signal_table(signal_rows, locale)
 
-    st.dataframe(latest_rows, width="stretch", hide_index=True)
+    with right_col:
+        render_html(
+            f"""
+            <div class="spotlight-card">
+                <div class="card-kicker">{escape(sanitize_text(tr("guide_title", locale)))}</div>
+                <div class="card-main">{escape(sanitize_text(tr("guide_main", locale)))}</div>
+                <div class="card-body">{escape(sanitize_text(tr("guide_sub", locale)))}</div>
+            </div>
+            """
+        )
+
+        render_html(
+            f"""
+            <div class="narrative-card">
+                <div class="card-kicker">{escape(sanitize_text(tr("narrative_title", locale)))}</div>
+                <div class="card-main">{escape(sanitize_text(tr("as_of", locale)))} {escape(sanitize_text(latest_month))}</div>
+                <div class="card-body">
+                    {escape(sanitize_text(build_signal_summary(
+                        latest_month=latest_month,
+                        latest_moi=inventory_val,
+                        current_zone=current_moi_zone_raw,
+                        yoy_sales=latest_yoy_sales,
+                        demand=demand_signal_raw,
+                        yoy_price=latest_yoy_price,
+                        price=price_signal_raw,
+                        yoy_listings=latest_yoy_listings,
+                        supply=supply_signal_raw,
+                        moi_trend=moi_trend_raw,
+                        overall=overall_raw,
+                        lang=locale,
+                    )))}
+                </div>
+            </div>
+            """
+        )
+
+        render_html(
+            f"""
+            <div class="guide-card">
+                <div class="card-kicker">{escape(sanitize_text(tr("source_note", locale)))}</div>
+                <div class="card-main">{escape(sanitize_text(tr("overall_market", locale)))}: {escape(sanitize_text(overall_display))}</div>
+                <div class="card-body">{escape(sanitize_text(tr("source_note_text", locale)))}</div>
+            </div>
+            """
+        )
+
+    with st.expander(tr("how_to_read", locale)):
+        st.write(tr("how_to_read_text", locale))
+
+    with st.expander(tr("source_note", locale)):
+        st.write(tr("source_note_text", locale))
+
+    with st.expander(tr("macro_note_title", locale)):
+        st.markdown(tr("macro_note_body", locale))
+
+    with st.expander(tr("show_latest_rows", locale)):
+        latest_rows = view[
+            [
+                "report_month",
+                "months_inventory",
+                "listings",
+                "sales",
+                "median_price",
+                "yoy_listings_pct",
+                "yoy_sales_pct",
+                "yoy_price_pct",
+                "mom_inventory_pct",
+                "mom_sales_pct",
+                "mom_price_pct",
+            ]
+        ].copy()
+
+        latest_rows = latest_rows.sort_values("report_month", ascending=False).head(24)
+
+        latest_rows = latest_rows.rename(
+            columns={
+                "report_month": tr("report_month", locale),
+                "months_inventory": tr("months_inventory", locale),
+                "listings": tr("listings", locale),
+                "sales": tr("sales", locale),
+                "median_price": tr("median_price", locale),
+                "yoy_listings_pct": tr("yoy_listings_pct", locale),
+                "yoy_sales_pct": tr("yoy_sales_pct", locale),
+                "yoy_price_pct": tr("yoy_price_pct", locale),
+                "mom_inventory_pct": tr("mom_inventory_pct", locale),
+                "mom_sales_pct": tr("mom_sales_pct", locale),
+                "mom_price_pct": tr("mom_price_pct", locale),
+            }
+        )
+
+        st.dataframe(latest_rows, width="stretch", hide_index=True)
+
+
+if __name__ == "__main__":
+    main()

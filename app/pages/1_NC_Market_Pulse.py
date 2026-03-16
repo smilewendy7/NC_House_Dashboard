@@ -1,13 +1,25 @@
 from __future__ import annotations
 
-from html import escape
+import sys
 from pathlib import Path
+from html import escape
 import math
 import re
 
 import altair as alt
 import pandas as pd
 import streamlit as st
+
+APP_DIR = Path(__file__).resolve().parents[1]
+if str(APP_DIR) not in sys.path:
+    sys.path.append(str(APP_DIR))
+
+from shared_ui import (
+    inject_base_css,
+    render_global_sidebar,
+    get_locale,
+    get_budget_k,
+)
 
 st.set_page_config(
     page_title="NC Market Pulse / 北卡市场总览",
@@ -27,6 +39,12 @@ TEXT = {
         "title": "NC Market Pulse",
         "subtitle": "Statewide market analytics for buyers, investors, and advisors to assess inventory pressure, demand shifts, and pricing conditions more efficiently.",
         "hero_chip": "North Carolina Macro Market Analytics",
+
+        "sidebar_preferences": "Preferences",
+        "language": "Language",
+        "budget_global": "Budget (USD, in $1,000s)",
+        "budget_note": "This budget setting is shared across pages and can be adjusted anytime.",
+        "selected_budget": "Selected Budget",
 
         "filters": "Filters",
         "month_window": "Month Window",
@@ -192,6 +210,12 @@ TEXT = {
         "title": "北卡市场总览",
         "subtitle": "面向买家、投资人和房产顾问的州级市场分析页面，用于更高效地判断库存压力、供需变化与价格环境。",
         "hero_chip": "北卡宏观市场分析",
+
+        "sidebar_preferences": "偏好设置",
+        "language": "语言",
+        "budget_global": "预算（美元，单位：千）",
+        "budget_note": "这个预算设置会在不同页面之间共享，也可以随时手动调整。",
+        "selected_budget": "当前预算",
 
         "filters": "筛选条件",
         "month_window": "月份范围",
@@ -368,7 +392,7 @@ def inject_css() -> None:
         """
         <style>
         :root{
-            --bg:#f3f6fb;
+            --bg:#f4f7fb;
             --card:#ffffff;
             --text:#0f172a;
             --muted:#64748b;
@@ -382,19 +406,20 @@ def inject_css() -> None:
             --red-bg:#fef2f2;
             --blue:#2563eb;
             --blue-soft:#eff6ff;
-            --shadow:0 10px 26px rgba(15, 23, 42, 0.06);
+            --shadow:0 10px 28px rgba(15, 23, 42, 0.06);
             --shadow-strong:0 18px 50px rgba(15, 23, 42, 0.12);
         }
 
         html, body, [class*="css"] {
             font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+            color: var(--text);
         }
 
         .stApp {
             background:
                 radial-gradient(circle at top left, rgba(37,99,235,0.04), transparent 20%),
                 radial-gradient(circle at top right, rgba(14,165,233,0.03), transparent 18%),
-                linear-gradient(180deg, #f8fafc 0%, #f3f6fb 100%);
+                linear-gradient(180deg, #f8fafc 0%, #f4f7fb 100%);
         }
 
         .block-container {
@@ -406,6 +431,13 @@ def inject_css() -> None:
         section[data-testid="stSidebar"] {
             background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
             border-right: 1px solid #e5e7eb;
+        }
+
+        section[data-testid="stSidebar"] .stSelectbox label,
+        section[data-testid="stSidebar"] .stSlider label,
+        section[data-testid="stSidebar"] .stRadio label {
+            font-weight: 700 !important;
+            color: #334155 !important;
         }
 
         .hero {
@@ -438,9 +470,9 @@ def inject_css() -> None:
         }
 
         .hero-title {
-            font-size: 2.04rem;
+            font-size: 2.05rem;
             font-weight: 900;
-            line-height: 1.05;
+            line-height: 1.06;
             letter-spacing: -0.02em;
             margin-bottom: 0.38rem;
         }
@@ -449,7 +481,7 @@ def inject_css() -> None:
             font-size: 1rem;
             color: rgba(255,255,255,0.92);
             margin-bottom: 0.45rem;
-            line-height: 1.66;
+            line-height: 1.68;
             max-width: 1120px;
         }
 
@@ -465,15 +497,17 @@ def inject_css() -> None:
             border: 1px solid var(--line);
             border-radius: 22px;
             box-shadow: var(--shadow);
+            min-width: 0;
+            overflow: hidden;
         }
 
         .summary-card {
-            min-height: 138px;
+            min-height: 142px;
             padding: 16px 18px;
             position: relative;
             overflow: hidden;
             background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
-            margin-bottom: 0.35rem;
+            margin-bottom: 0.4rem;
         }
 
         .summary-card::after {
@@ -481,8 +515,8 @@ def inject_css() -> None:
             position:absolute;
             top:0;
             right:0;
-            width:86px;
-            height:86px;
+            width:88px;
+            height:88px;
             background: radial-gradient(circle, rgba(37,99,235,0.06) 0%, rgba(37,99,235,0) 68%);
             pointer-events:none;
         }
@@ -501,20 +535,24 @@ def inject_css() -> None:
         }
 
         .summary-value {
-            font-size: 1.16rem;
+            font-size: 1.12rem;
             font-weight: 900;
-            line-height: 1.25;
+            line-height: 1.28;
             color: var(--text);
             margin-bottom: 0.30rem;
             word-break: break-word;
             white-space: normal;
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .summary-sub {
             font-size: 0.88rem;
             color: var(--muted);
-            line-height: 1.45;
+            line-height: 1.5;
             margin-top: 0.42rem;
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .summary-sub:empty {
@@ -522,51 +560,51 @@ def inject_css() -> None:
         }
 
         .section-head {
-            margin-top: 1.1rem;
-            margin-bottom: 0.9rem;
+            margin-top: 1.15rem;
+            margin-bottom: 0.95rem;
         }
 
         .section-title {
-            font-size: 1.18rem;
+            font-size: 1.16rem;
             font-weight: 900;
             color: var(--text);
             letter-spacing: -0.01em;
-            margin-bottom: 0.08rem;
+            margin-bottom: 0.10rem;
         }
 
         .section-subtitle {
-            font-size: 0.93rem;
+            font-size: 0.94rem;
             color: var(--muted);
-            line-height: 1.58;
+            line-height: 1.6;
         }
 
         .chart-card {
             padding: 18px 18px 14px 18px;
             background: linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
-            margin-top: 0.40rem;
-            margin-bottom: 1.65rem;
+            margin-top: 0.45rem;
+            margin-bottom: 1.5rem;
         }
 
         .chart-title {
             font-size: 1.02rem;
             font-weight: 860;
             color: var(--text);
-            margin-bottom: 0.16rem;
+            margin-bottom: 0.18rem;
         }
 
         .chart-caption {
-            font-size: 0.90rem;
+            font-size: 0.91rem;
             color: var(--muted);
-            line-height: 1.56;
-            margin-bottom: 0.90rem;
+            line-height: 1.58;
+            margin-bottom: 0.88rem;
             max-width: 1120px;
         }
 
         .signal-card {
-            min-height: 162px;
+            min-height: 168px;
             padding: 18px 20px;
             background: linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
-            margin-bottom: 0.90rem;
+            margin-bottom: 0.95rem;
         }
 
         .signal-kicker {
@@ -579,32 +617,47 @@ def inject_css() -> None:
         }
 
         .signal-main {
-            font-size: 1.10rem;
+            font-size: 1.08rem;
             font-weight: 900;
-            line-height: 1.18;
+            line-height: 1.2;
             color: var(--text);
             margin-bottom: 0.34rem;
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .signal-sub {
             font-size: 0.90rem;
             color: var(--muted);
-            line-height: 1.56;
+            line-height: 1.58;
             margin-top: 0.42rem;
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .signal-chip {
-            display:inline-flex;
-            align-items:center;
-            gap:8px;
-            padding: 0.38rem 0.70rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0.42rem 0.72rem;
             border-radius: 999px;
-            font-size: 0.76rem;
+            font-size: 0.75rem;
             font-weight: 860;
-            line-height: 1;
-            white-space: nowrap;
-            margin-top: 2px;
+            line-height: 1.25;
+            white-space: normal;
+            flex-wrap: wrap;
+            max-width: 100%;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            margin-top: 4px;
             border: 1px solid transparent;
+            box-sizing: border-box;
+        }
+
+        .summary-card .signal-chip {
+            font-size: 0.72rem;
+            padding: 0.34rem 0.62rem;
+            line-height: 1.2;
         }
 
         .signal-chip-icon {
@@ -667,14 +720,18 @@ def inject_css() -> None:
             font-size: 1rem;
             font-weight: 850;
             color: var(--text);
-            line-height: 1.34;
+            line-height: 1.36;
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .card-body {
             margin-top: 0.40rem;
             font-size: 0.92rem;
             color: var(--muted);
-            line-height: 1.68;
+            line-height: 1.7;
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .card-body strong {
@@ -708,6 +765,8 @@ def inject_css() -> None:
             font-weight: 860;
             color: var(--text);
             line-height: 1.16;
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .signal-table {
@@ -718,7 +777,13 @@ def inject_css() -> None:
             border: 1px solid var(--line);
             border-radius: 16px;
             margin-top: 0.5rem;
+            table-layout: auto;
         }
+
+        .signal-table col.metric-col { width: 23%; }
+        .signal-table col.value-col  { width: 22%; }
+        .signal-table col.signal-col { width: 23%; }
+        .signal-table col.basis-col  { width: 32%; }
 
         .signal-table th {
             background: #f8fafc;
@@ -748,6 +813,14 @@ def inject_css() -> None:
             color: var(--text);
         }
 
+        .signal-cell {
+            min-width: 150px;
+        }
+
+        .basis-cell {
+            min-width: 170px;
+        }
+
         div[data-testid="stDataFrame"], .stDataFrame {
             border-radius: 18px;
             overflow: hidden;
@@ -766,6 +839,18 @@ def inject_css() -> None:
         @media (max-width: 1200px) {
             .metric-strip {
                 grid-template-columns: repeat(2, minmax(0,1fr));
+            }
+
+            .signal-table col.metric-col,
+            .signal-table col.value-col,
+            .signal-table col.signal-col,
+            .signal-table col.basis-col {
+                width: auto;
+            }
+
+            .signal-cell,
+            .basis-cell {
+                min-width: 0;
             }
         }
         </style>
@@ -1644,7 +1729,13 @@ def render_signal_table(rows: list[dict], lang: str) -> None:
     parts = [
         '<div class="table-card">',
         f'<div class="card-kicker">{escape(sanitize_text(tr("signal_table_title", lang)))}</div>',
-        f'<table class="signal-table">',
+        '<table class="signal-table">',
+        '<colgroup>',
+        '<col class="metric-col">',
+        '<col class="value-col">',
+        '<col class="signal-col">',
+        '<col class="basis-col">',
+        '</colgroup>',
         "<thead><tr>",
         f'<th>{escape(sanitize_text(tr("table_metric", lang)))}</th>',
         f'<th>{escape(sanitize_text(tr("table_value", lang)))}</th>',
@@ -1658,8 +1749,8 @@ def render_signal_table(rows: list[dict], lang: str) -> None:
             "<tr>"
             f'<td class="table-metric">{escape(sanitize_text(row["metric"]))}</td>'
             f'<td>{escape(sanitize_text(row["value"]))}</td>'
-            f'<td>{signal_chip_html(row["signal"], row["state"])}</td>'
-            f'<td>{escape(sanitize_text(row["basis"]))}</td>'
+            f'<td class="signal-cell">{signal_chip_html(row["signal"], row["state"])}</td>'
+            f'<td class="basis-cell">{escape(sanitize_text(row["basis"]))}</td>'
             "</tr>"
         )
 
@@ -1671,10 +1762,17 @@ def render_signal_table(rows: list[dict], lang: str) -> None:
 # App
 # =========================================================
 def main() -> None:
+    inject_base_css()
     inject_css()
 
-    lang = st.sidebar.radio("Language / 语言", options=["中文", "English"], index=0, horizontal=True)
-    locale = "zh" if lang == "中文" else "en"
+    render_global_sidebar()
+    locale = get_locale()
+    budget_k = get_budget_k()
+    budget_usd = budget_k * 1000
+
+    st.sidebar.divider()
+    st.sidebar.header(tr("filters", locale))
+    st.sidebar.caption(tr("budget_note", locale))
 
     df = load_monthly_metrics(DATA_PATH)
     if df.empty:
@@ -1699,8 +1797,6 @@ def main() -> None:
         st.stop()
 
     render_hero(locale)
-
-    st.sidebar.header(tr("filters", locale))
 
     time_range_map = {
         tr("last_12m", locale): "12M",
@@ -1789,7 +1885,7 @@ def main() -> None:
     price_state = generic_state(price_signal_raw)
     price_phrase = price_direction_phrase(latest_yoy_price, locale)
 
-    s1, s2, s3, s4, s5 = st.columns(5)
+    s1, s2, s3, s4, s5, s6 = st.columns(6)
     with s1:
         render_summary_card(
             tr("metric_latest_month", locale),
@@ -1825,6 +1921,12 @@ def main() -> None:
             f'{tr("price_yoy", locale)}: {movement_text(latest_yoy_price, locale, 1)}',
             state=price_state,
             badge_label=price_signal_display,
+        )
+    with s6:
+        render_summary_card(
+            tr("selected_budget", locale),
+            fmt_money(budget_usd),
+            tr("budget_note", locale),
         )
 
     render_section_head(tr("section_charts", locale), tr("section_charts_sub", locale))
@@ -1880,7 +1982,8 @@ def main() -> None:
             tr("signal_card_5_sub", locale),
         )
 
-    left_col, right_col = st.columns([1.06, 1.44], gap="large")
+    # 左边更宽，右边更窄
+    left_col, right_col = st.columns([1.28, 0.92], gap="large")
 
     with left_col:
         signal_rows = [

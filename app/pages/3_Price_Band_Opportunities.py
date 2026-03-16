@@ -10,6 +10,18 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+import sys
+APP_DIR = Path(__file__).resolve().parents[1]
+if str(APP_DIR) not in sys.path:
+    sys.path.append(str(APP_DIR))
+
+from shared_ui import (
+    inject_base_css,
+    render_global_sidebar,
+    get_locale,
+    get_budget_k,
+)
+
 st.set_page_config(
     page_title="Price Band Opportunities / 价格带机会",
     page_icon="🎯",
@@ -465,6 +477,8 @@ def inject_css() -> None:
             border: 1px solid var(--line);
             border-radius: 22px;
             box-shadow: var(--shadow);
+            min-width: 0;
+            overflow: hidden;
         }
 
         .summary-card {
@@ -518,6 +532,26 @@ def inject_css() -> None:
 
         .summary-sub:empty {
             display:none;
+        }
+
+        .summary-value,
+        .summary-sub,
+        .executive-main,
+        .executive-sub,
+        .spotlight-main,
+        .spotlight-sub,
+        .spotlight-band,
+        .spotlight-meta,
+        .card-main,
+        .card-body,
+        .metric-box-value,
+        .top-op-band,
+        .top-op-meta,
+        .statement-main,
+        .statement-sub {
+            min-width: 0;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .section-head {
@@ -598,10 +632,15 @@ def inject_css() -> None:
             border-radius: 999px;
             font-size: 0.76rem;
             font-weight: 860;
-            line-height: 1;
-            white-space: nowrap;
+            line-height: 1.25;
+            white-space: normal;
+            flex-wrap: wrap;
+            max-width: 100%;
+            word-break: break-word;
+            overflow-wrap: anywhere;
             margin-top: 2px;
             border: 1px solid transparent;
+            box-sizing: border-box;
         }
 
         .signal-chip-icon {
@@ -1714,10 +1753,11 @@ def style_ranking(df: pd.DataFrame, t: dict):
 # Main
 # =========================================================
 def main() -> None:
+    inject_base_css()
     inject_css()
 
-    lang = st.sidebar.radio("Language / 语言", options=["中文", "English"], index=0, horizontal=True)
-    locale = "zh" if lang == "中文" else "en"
+    render_global_sidebar()
+    locale = get_locale()
     t = I18N[locale]
 
     df = load_price_bands(PRICE_BAND_PATH)
@@ -1744,9 +1784,11 @@ def main() -> None:
         st.warning(t["no_valid_month"])
         st.stop()
 
+    st.sidebar.divider()
     st.sidebar.header(t["filters"])
     month = st.sidebar.selectbox(t["month"], months, index=len(months) - 1)
-    budget_k = st.sidebar.slider(t["budget"], min_value=200, max_value=1500, value=550, step=10)
+
+    budget_k = get_budget_k()
     budget_usd = float(budget_k) * 1000
 
     df_m = df[df["report_month"] == month].copy()
@@ -1760,7 +1802,11 @@ def main() -> None:
     render_hero(t)
 
     best_candidates = df_m.dropna(subset=["buyer_leverage_score"])
-    best_row = best_candidates.sort_values("buyer_leverage_score", ascending=False).iloc[0] if not best_candidates.empty else df_m.iloc[0]
+    best_row = (
+        best_candidates.sort_values("buyer_leverage_score", ascending=False).iloc[0]
+        if not best_candidates.empty
+        else df_m.iloc[0]
+    )
     budget_row = pick_budget_band(df_m, budget_usd)
     nearby_best_row = pick_nearby_best_band(df_m, budget_row)
     median_moi = df_m["months_inventory"].median()
@@ -1989,7 +2035,7 @@ def main() -> None:
     render_section_head(t["section_budget"], t["section_budget_sub"])
 
     if budget_row is None:
-        st.warning("Could not map budget to a price band.")
+        st.warning("Could not map budget to a price band." if locale == "en" else "无法将预算匹配到价格带。")
         st.stop()
 
     inv = float(budget_row["months_inventory"]) if pd.notna(budget_row["months_inventory"]) else np.nan
@@ -2104,7 +2150,7 @@ def main() -> None:
             "buyer_leverage_score": budget_row.get("buyer_leverage_score"),
             "market_zone": detail_zone,
         }
-        st.json(details)
+        st.json(details) 
 
 
 if __name__ == "__main__":

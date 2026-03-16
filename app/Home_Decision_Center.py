@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Optional
 from textwrap import dedent
@@ -7,6 +8,16 @@ from textwrap import dedent
 import pandas as pd
 import streamlit as st
 
+APP_DIR = Path(__file__).resolve().parents[1]
+if str(APP_DIR) not in sys.path:
+    sys.path.append(str(APP_DIR))
+
+from shared_ui import (
+    inject_base_css,
+    render_global_sidebar,
+    get_lang,
+    get_budget_k,
+)
 
 st.set_page_config(
     page_title="NC Housing Decision Center",
@@ -98,6 +109,8 @@ def inject_css() -> None:
                 border: 1px solid #e6ebf2;
                 border-radius: 22px;
                 box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+                min-width: 0;
+                overflow: hidden;
             }
 
             .panel-card {
@@ -184,7 +197,12 @@ def inject_css() -> None:
                 margin-right: 0.44rem;
                 margin-top: 0.35rem;
                 border: 1px solid transparent;
-                white-space: nowrap;
+                white-space: normal;
+                flex-wrap: wrap;
+                max-width: 100%;
+                overflow-wrap: anywhere;
+                word-break: break-word;
+                box-sizing: border-box;
             }
 
             .badge-green {
@@ -225,6 +243,8 @@ def inject_css() -> None:
                 border-radius: 18px;
                 padding: 0.94rem 1rem;
                 box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+                min-width: 0;
+                overflow: hidden;
             }
 
             .metric-label {
@@ -242,6 +262,9 @@ def inject_css() -> None:
                 color: #0f172a;
                 line-height: 1.2;
                 letter-spacing: -0.01em;
+                min-width: 0;
+                overflow-wrap: anywhere;
+                word-break: break-word;
             }
 
             .summary-card {
@@ -266,12 +289,18 @@ def inject_css() -> None:
                 color: #0f172a;
                 line-height: 1.22;
                 margin-bottom: 0.24rem;
+                min-width: 0;
+                overflow-wrap: anywhere;
+                word-break: break-word;
             }
 
             .summary-sub {
                 font-size: 0.89rem;
                 color: #64748b;
                 line-height: 1.55;
+                min-width: 0;
+                overflow-wrap: anywhere;
+                word-break: break-word;
             }
 
             .insight-card,
@@ -296,12 +325,18 @@ def inject_css() -> None:
                 color: #0f172a;
                 margin-bottom: 0.56rem;
                 letter-spacing: -0.01em;
+                min-width: 0;
+                overflow-wrap: anywhere;
+                word-break: break-word;
             }
 
             .card-body {
                 color: #475569;
                 font-size: 0.95rem;
                 line-height: 1.68;
+                min-width: 0;
+                overflow-wrap: anywhere;
+                word-break: break-word;
             }
 
             .action-list {
@@ -425,6 +460,7 @@ TEXT = {
         "mini_tip": "Best use: buyer consultation, agent prep, investor screening, and pre-offer strategy discussions.",
         "identity": "Identity",
         "budget": "Budget (USD, in $1,000s)",
+        "shared_budget": "Shared Budget",
         "timeline": "Timeline",
         "goal": "Primary Goal",
         "down_payment": "Down Payment",
@@ -507,6 +543,7 @@ TEXT = {
         "mini_tip": "最佳用途：买家咨询、经纪人准备、投资者初筛、出价前策略讨论。",
         "identity": "身份",
         "budget": "预算（美元，单位：千）",
+        "shared_budget": "共享预算",
         "timeline": "时间窗口",
         "goal": "主要目标",
         "down_payment": "首付比例",
@@ -1057,12 +1094,11 @@ def badge_class_for_market(text_value: str, t: dict) -> str:
 # MAIN
 # =========================================================
 def main() -> None:
+    inject_base_css()
     inject_css()
 
-    if "lang" not in st.session_state:
-        st.session_state.lang = "English"
-
-    lang = st.sidebar.selectbox("Language / 语言", ["English", "中文"], key="lang")
+    render_global_sidebar()
+    lang = get_lang()
     t = TEXT[lang]
     opt = OPTIONS[lang]
 
@@ -1089,6 +1125,12 @@ def main() -> None:
     m_latest = monthly_df[monthly_df["report_month"] == latest_month].copy()
     b_latest = band_df[band_df["report_month"] == latest_month].copy()
 
+    st.sidebar.divider()
+    st.sidebar.header(t["profile"])
+
+    budget_k = get_budget_k()
+    budget_usd = float(budget_k) * 1000.0
+
     left, right = st.columns([0.96, 1.72], gap="large")
 
     with left:
@@ -1111,7 +1153,7 @@ def main() -> None:
         )
 
         with st.form("decision_form", clear_on_submit=False):
-            budget_k = st.slider(t["budget"], min_value=200, max_value=1500, value=550, step=10)
+            st.caption(f'{t["shared_budget"]}: {fmt_money(budget_usd)}')
             timeline = st.selectbox(t["timeline"], opt["timeline"])
             goal = st.selectbox(t["goal"], opt["goal"])
             down_payment = st.selectbox(t["down_payment"], opt["down_payment"])
@@ -1124,8 +1166,6 @@ def main() -> None:
     if not submitted:
         st.info(t["fill_form"])
         st.stop()
-
-    budget_usd = float(budget_k) * 1000.0
 
     inv_trend = trend_label(monthly_df["months_inventory"]) if "months_inventory" in monthly_df.columns else "Stable"
     sales_trend = trend_label(monthly_df["sales"]) if "sales" in monthly_df.columns else "Stable"

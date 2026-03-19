@@ -1,0 +1,22 @@
+
+[RUN] 'C:\Users\smile\AppData\Local\Python\pythoncore-3.14-64\python.exe' fetch_index.py
+status: 200
+Saved 24 rows to reports_index.csv
+[INFO] Preserved history for reports_index.csv: new=24 old=24 merged=24
+
+[RUN] 'C:\Users\smile\AppData\Local\Python\pythoncore-3.14-64\python.exe' fetch_manifest.py
+Saved 24 rows to reports_manifest.csv. 
+[INFO] Preserved history for reports_manifest.csv: new=24 old=24 merged=24
+
+[RUN] 'C:\Users\smile\AppData\Local\Python\pythoncore-3.14-64\python.exe' download_pdfs.py
+[INFO] Preserved history for reports_downloads.csv: new=24 old=24 merged=24
+
+[RUN] 'C:\Users\smile\AppData\Local\Python\pythoncore-3.14-64\python.exe' extract_pdfs.py --workers 4
+[INFO] PDFs found: 26 | to-parse: 0 | skipped: 26
+[INFO] Nothing to parse.
+
+[RUN] 'C:\Users\smile\AppData\Local\Python\pythoncore-3.14-64\python.exe' build_analytics.py
+[OK] Wrote: data\analytics\monthly_metrics.csv
+[OK] Wrote: data\analytics\price_ranges_enriched.csv
+[OK] Wrote: data\analytics\analytics_dq_issues.csv (rows=1)
+[OK] Wrote: data\analytics\build_analytics_run_log.jsonl

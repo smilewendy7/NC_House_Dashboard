@@ -1,0 +1,7 @@
+altair
+beautifulsoup4
+numpy
+pandas
+pdfplumber
+requests
+streamlit

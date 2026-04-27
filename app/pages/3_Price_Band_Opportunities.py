@@ -1740,7 +1740,7 @@ def style_ranking(df: pd.DataFrame, t: dict):
             na_rep="N/A",
         )
         .apply(row_style, axis=1)
-        .applymap(emphasize_score, subset=[score_col])
+        .map(emphasize_score, subset=[score_col])
         .set_properties(**{
             "border-color": "#e5e7eb",
             "font-size": "0.92rem",
